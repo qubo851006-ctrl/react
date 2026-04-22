@@ -11,8 +11,10 @@ AIRCHINA_BASE_URL = os.getenv("AIRCHINA_BASE_URL",  "")
 ZHISHU_API_KEY    = os.getenv("ZHISHU_API_KEY",     "")
 ZHISHU_BASE_URL   = os.getenv("ZHISHU_BASE_URL",    "")
 
-# Data directories (shared with training-manager)
-DATA_ROOT          = r"D:\claude\training-manager"
+# Data directories — all user-generated content stored under the project's data/ folder
+_BACKEND_DIR       = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT      = os.path.dirname(_BACKEND_DIR)
+DATA_ROOT          = os.path.join(_PROJECT_ROOT, "data")
 CHAT_HISTORY_PATH  = os.path.join(DATA_ROOT, "chat_history.json")
 LEDGER_OUTPUT_DIR  = os.path.join(DATA_ROOT, "案件台账")
 LEDGER_JSON_PATH   = os.path.join(DATA_ROOT, "案件台账", "cases.json")

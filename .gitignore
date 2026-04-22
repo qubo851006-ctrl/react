@@ -9,6 +9,13 @@ backend/**/__pycache__/
 backend/*.pyc
 backend/.env
 
+# User data (uploads, generated files)
+data/
+
+# Old backend data artifacts
+backend/培训档案/
+backend/培训统计表.xlsx
+
 # OS
 .DS_Store
 Thumbs.db

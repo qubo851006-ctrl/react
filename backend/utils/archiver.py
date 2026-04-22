@@ -1,9 +1,12 @@
 import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import shutil
 import re
+from config import DATA_ROOT
 
 
-ARCHIVE_ROOT = os.path.join(os.path.dirname(os.path.dirname(__file__)), "培训档案")
+ARCHIVE_ROOT = os.path.join(DATA_ROOT, "培训档案")
 
 
 def sanitize_folder_name(name: str) -> str:

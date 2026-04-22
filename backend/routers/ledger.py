@@ -85,13 +85,8 @@ async def process_ledger(files: list[UploadFile] = File(...)):
         Path(LEDGER_OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 
         # 写 Excel
-        import sys
-        sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-        LEGAL_LEDGER_PATH = r"C:\Users\shinh\Documents\GitHub\claude-code\legal_ledger"
-        if LEGAL_LEDGER_PATH not in sys.path:
-            sys.path.insert(0, LEGAL_LEDGER_PATH)
         try:
-            from write_excel import write_ledger as write_legal_ledger
+            from utils.write_excel import write_ledger as write_legal_ledger
             write_legal_ledger(existing_cases, LEDGER_EXCEL_PATH)
         except Exception as e:
             yield send(f"⚠️ Excel 写入失败：{e}")

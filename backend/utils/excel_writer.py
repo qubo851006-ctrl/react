@@ -1,10 +1,13 @@
 import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from datetime import datetime
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
+from config import DATA_ROOT
 
 
-EXCEL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "培训统计表.xlsx")
+EXCEL_PATH = os.path.join(DATA_ROOT, "培训统计表.xlsx")
 
 HEADERS = ["序号", "培训日期", "培训主题", "培训地点", "主办部门", "参与人数", "培训类别", "归档路径", "录入时间"]
 
