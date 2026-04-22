@@ -101,10 +101,35 @@ def chat(req: ChatRequest):
         )
         return resp.choices[0].message.content.strip().upper().startswith("Y")
 
+    # 下载意图优先检测（必须在处理类意图之前，避免被误拦截）
+    if detect_intent(
+        '你是一个意图识别助手。判断用户的消息是否表达了想要下载或导出培训统计表、培训台账、培训记录Excel的意图。'
+        '关键词包括：下载、导出、获取、统计表、培训台账、培训记录、Excel。'
+        '注意：如果用户说的是"导出培训台账"、"下载统计表"、"获取培训Excel"等，应判断为YES。'
+        '只回复 YES 或 NO。'
+    ):
+        reply = "📥 正在为您打开培训统计表下载…"
+        history.append({"role": "user", "content": req.message})
+        history.append({"role": "assistant", "content": reply})
+        save_history(history)
+        return {"reply": reply, "next_stage": "download_training_excel", "kb_conversation_id": ""}
+
+    if detect_intent(
+        '你是一个意图识别助手。判断用户的消息是否表达了想要下载或导出案件台账、诉讼台账Excel的意图。'
+        '关键词包括：下载、导出、获取、案件台账、诉讼台账、台账Excel。'
+        '注意：如果用户说的是"导出案件台账"、"下载台账"等，应判断为YES。'
+        '只回复 YES 或 NO。'
+    ):
+        reply = "📥 正在为您打开案件台账下载…"
+        history.append({"role": "user", "content": req.message})
+        history.append({"role": "assistant", "content": reply})
+        save_history(history)
+        return {"reply": reply, "next_stage": "download_ledger_excel", "kb_conversation_id": ""}
+
     if detect_intent(
         '你是一个意图识别助手。判断用户的消息是否表达了需要进行培训统计或归档处理的意图。'
         '包括但不限于：刚组织完培训想记录、要统计签到人数、需要归档培训文件、上传培训材料等。'
-        '注意：即使用户是顺带提到也应判断为YES。只回复 YES 或 NO。'
+        '注意：纯粹的下载/导出请求不算，只有涉及上传文件、新增记录才算YES。只回复 YES 或 NO。'
     ):
         reply = (
             "好的！请上传以下两个文件：\n\n"
@@ -118,7 +143,7 @@ def chat(req: ChatRequest):
 
     if detect_intent(
         '你是一个意图识别助手。判断用户的消息是否表达了需要生成案件台账、整理诉讼案件材料、'
-        '提取案件信息或生成法务台账的意图。只回复 YES 或 NO。'
+        '提取案件信息或生成法务台账的意图。注意：纯粹的下载/导出请求不算，只有涉及上传文书、新增案件才算YES。只回复 YES 或 NO。'
     ):
         reply = (
             "好的！请上传案件的法律文书文件（支持 **PDF / DOCX / DOC**，可多选）。\n\n"
@@ -144,26 +169,6 @@ def chat(req: ChatRequest):
         history.append({"role": "assistant", "content": reply})
         save_history(history)
         return {"reply": reply, "next_stage": "waiting_auth_file", "kb_conversation_id": ""}
-
-    if detect_intent(
-        '你是一个意图识别助手。判断用户的消息是否表达了想要下载或获取培训统计表、培训记录Excel的意图。'
-        '包括：下载统计表、导出培训记录、获取培训Excel等。只回复 YES 或 NO。'
-    ):
-        reply = "📥 正在为您打开培训统计表下载…"
-        history.append({"role": "user", "content": req.message})
-        history.append({"role": "assistant", "content": reply})
-        save_history(history)
-        return {"reply": reply, "next_stage": "download_training_excel", "kb_conversation_id": ""}
-
-    if detect_intent(
-        '你是一个意图识别助手。判断用户的消息是否表达了想要下载或获取案件台账、诉讼台账Excel的意图。'
-        '包括：下载台账、导出案件记录、获取台账Excel等。只回复 YES 或 NO。'
-    ):
-        reply = "📥 正在为您打开案件台账下载…"
-        history.append({"role": "user", "content": req.message})
-        history.append({"role": "assistant", "content": reply})
-        save_history(history)
-        return {"reply": reply, "next_stage": "download_ledger_excel", "kb_conversation_id": ""}
 
     # 通用对话
     system_prompt = (
