@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { processTraining, downloadTrainingExcel } from '../api'
+import { extractTraining, writeTraining, downloadTrainingExcel } from '../api'
 import type { TrainingResult } from '../types'
 
 interface Props {
@@ -7,35 +7,63 @@ interface Props {
   onCancel: () => void
 }
 
-type Step = 'upload' | 'dept' | 'processing' | 'done'
+type Step = 'upload' | 'dept' | 'processing' | 'confirm' | 'done'
 
 export default function TrainingFlow({ onComplete, onCancel }: Props) {
   const [step, setStep] = useState<Step>('upload')
   const [noticePdf, setNoticePdf] = useState<File | null>(null)
   const [signinImg, setSigninImg] = useState<File | null>(null)
   const [department, setDepartment] = useState('')
-  const [result, setResult] = useState<TrainingResult | null>(null)
+  const [extracted, setExtracted] = useState<TrainingResult | null>(null)
+  const [edited, setEdited] = useState<TrainingResult | null>(null)
   const [error, setError] = useState('')
+  const [writing, setWriting] = useState(false)
   const deptRef = useRef<HTMLInputElement>(null)
 
   const canUpload = noticePdf && signinImg
 
-  async function handleProcess() {
+  async function handleExtract() {
     if (!noticePdf || !signinImg) return
     setStep('processing')
     setError('')
     try {
-      const res = await processTraining(noticePdf, signinImg, department)
-      setResult(res)
-      setStep('done')
-      const reply = `✅ 培训统计完成！主题：${res.topic}，参与人数：${res.count} 人，类别：${res.category}`
-      onComplete(reply)
+      const res = await extractTraining(noticePdf, signinImg, department)
+      setExtracted(res)
+      setEdited({ ...res })
+      setStep('confirm')
     } catch (e: any) {
       setError(e.message || '处理失败')
       setStep('upload')
     }
   }
 
+  async function handleWrite() {
+    if (!edited) return
+    setWriting(true)
+    try {
+      await writeTraining({
+        topic: edited.topic,
+        location: edited.location,
+        date: edited.date,
+        department: edited.department,
+        count: edited.count,
+        category: edited.category,
+        archive_path: edited.archive_path,
+      })
+      setStep('done')
+      onComplete(`✅ 培训记录已写入台账！主题：${edited.topic}，参与人数：${edited.count} 人`)
+    } catch (e: any) {
+      setError(e.message || '写入失败')
+    } finally {
+      setWriting(false)
+    }
+  }
+
+  function setField(key: keyof TrainingResult, value: string | number) {
+    setEdited(prev => prev ? { ...prev, [key]: value } : prev)
+  }
+
+  // ── 处理中 ──────────────────────────────────────────────────
   if (step === 'processing') {
     return (
       <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 my-3">
@@ -47,20 +75,90 @@ export default function TrainingFlow({ onComplete, onCancel }: Props) {
     )
   }
 
-  if (step === 'done' && result) {
+  // ── 确认步骤 ────────────────────────────────────────────────
+  if (step === 'confirm' && extracted && edited) {
+    const confidenceLabel = extracted.confidence === 'high'
+      ? <span className="text-green-400 text-xs">🟢 高置信度</span>
+      : <span className="text-yellow-400 text-xs">🟡 低置信度（建议核对）</span>
+
     return (
       <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 my-3">
-        <div className="text-green-400 font-medium mb-4">✅ 处理完成</div>
-        <table className="w-full text-sm">
+        <div className="text-sm font-medium text-slate-200 mb-1">请确认以下识别结果，可直接修改后再写入台账：</div>
+        {extracted.reflection_note && (
+          <div className="text-xs text-slate-400 bg-slate-700/50 rounded-lg px-3 py-2 mb-4">
+            🔍 {extracted.reflection_note}
+          </div>
+        )}
+        {error && <div className="text-red-400 text-sm mb-3">❌ {error}</div>}
+
+        <div className="space-y-2 mb-5">
+          {([
+            ['培训主题', 'topic', 'text'],
+            ['培训地点', 'location', 'text'],
+            ['培训日期', 'date', 'text'],
+            ['主办部门', 'department', 'text'],
+            ['培训类别', 'category', 'text'],
+          ] as [string, keyof TrainingResult, string][]).map(([label, key, type]) => (
+            <div key={key} className="flex items-center gap-3">
+              <span className="text-slate-400 text-sm w-20 flex-shrink-0">{label}</span>
+              <input
+                type={type}
+                value={String(edited[key] ?? '')}
+                onChange={e => setField(key, e.target.value)}
+                className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-white outline-none focus:border-indigo-500"
+              />
+            </div>
+          ))}
+          <div className="flex items-center gap-3">
+            <span className="text-slate-400 text-sm w-20 flex-shrink-0">参与人数</span>
+            <div className="flex items-center gap-2 flex-1">
+              <input
+                type="number"
+                min={0}
+                value={edited.count}
+                onChange={e => setField('count', parseInt(e.target.value) || 0)}
+                className="w-24 bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-white outline-none focus:border-indigo-500"
+              />
+              <span className="text-slate-400 text-sm">人</span>
+              {confidenceLabel}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={handleWrite}
+            disabled={writing}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm rounded-lg transition-colors"
+          >
+            {writing ? '写入中…' : '✅ 确认写入台账'}
+          </button>
+          <button
+            onClick={onCancel}
+            className="px-3 py-2 text-slate-400 hover:text-slate-200 text-sm transition-colors"
+          >
+            取消
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── 完成 ────────────────────────────────────────────────────
+  if (step === 'done' && edited) {
+    return (
+      <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 my-3">
+        <div className="text-green-400 font-medium mb-4">✅ 已写入台账</div>
+        <table className="w-full text-sm mb-4">
           <tbody>
-            {[
-              ['培训主题', result.topic],
-              ['培训地点', result.location],
-              ['培训日期', result.date],
-              ['主办部门', result.department],
-              ['参与人数', `${result.count} 人`],
-              ['培训类别', result.category],
-            ].map(([k, v]) => (
+            {([
+              ['培训主题', edited.topic],
+              ['培训地点', edited.location],
+              ['培训日期', edited.date],
+              ['主办部门', edited.department || '未填写'],
+              ['参与人数', `${edited.count} 人`],
+              ['培训类别', edited.category],
+            ] as [string, string][]).map(([k, v]) => (
               <tr key={k} className="border-b border-slate-700/50">
                 <td className="py-2 pr-4 text-slate-400 w-24">{k}</td>
                 <td className="py-2 text-slate-200 font-medium">{v}</td>
@@ -70,19 +168,21 @@ export default function TrainingFlow({ onComplete, onCancel }: Props) {
         </table>
         <button
           onClick={downloadTrainingExcel}
-          className="mt-4 flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg transition-colors"
         >
-          📥 下载统计表 Excel
+          📥 下载培训统计表 Excel
         </button>
       </div>
     )
   }
 
+  // ── 填写部门 ────────────────────────────────────────────────
   if (step === 'dept') {
     return (
       <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 my-3">
         <div className="text-sm text-slate-300 mb-4">
-          文件已收到：<span className="text-indigo-400">{noticePdf?.name}</span>、<span className="text-indigo-400">{signinImg?.name}</span>
+          文件已收到：<span className="text-indigo-400">{noticePdf?.name}</span>、
+          <span className="text-indigo-400">{signinImg?.name}</span>
           <br />请填写主办部门（可留空跳过）：
         </div>
         <div className="flex gap-2">
@@ -92,12 +192,12 @@ export default function TrainingFlow({ onComplete, onCancel }: Props) {
             placeholder="主办部门（可选）"
             value={department}
             onChange={e => setDepartment(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleProcess()}
+            onKeyDown={e => e.key === 'Enter' && handleExtract()}
             className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:border-indigo-500"
             autoFocus
           />
           <button
-            onClick={handleProcess}
+            onClick={handleExtract}
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg transition-colors"
           >
             开始处理
@@ -113,7 +213,7 @@ export default function TrainingFlow({ onComplete, onCancel }: Props) {
     )
   }
 
-  // step === 'upload'
+  // ── 上传文件 ────────────────────────────────────────────────
   return (
     <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 my-3">
       <div className="text-sm font-medium text-slate-300 mb-4">请上传以下两个文件：</div>

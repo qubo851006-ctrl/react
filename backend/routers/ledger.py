@@ -3,10 +3,11 @@ import json
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Any
 
 from fastapi import APIRouter, UploadFile, File
 from fastapi.responses import StreamingResponse, FileResponse
+from pydantic import BaseModel
 
 from config import LEDGER_JSON_PATH, LEDGER_EXCEL_PATH, LEDGER_OUTPUT_DIR
 from ledger_helpers import (
@@ -19,8 +20,14 @@ from routers.chat import load_history, save_history
 router = APIRouter(prefix="/api/ledger", tags=["ledger"])
 
 
-@router.post("/process")
-async def process_ledger(files: list[UploadFile] = File(...)):
+# ── 提取（SSE 流式，不写入）──────────────────────────────────
+
+@router.post("/extract")
+async def extract_ledger(files: list[UploadFile] = File(...)):
+    """
+    流式提取案件信息、比对台账、归档文书，但不写入 cases.json / Excel。
+    SSE 最终事件携带 preview 数据供前端展示确认。
+    """
     files_data = []
     for f in files:
         b = await f.read()
@@ -30,11 +37,9 @@ async def process_ledger(files: list[UploadFile] = File(...)):
         def send(msg: str) -> str:
             return f"data: {json.dumps({'log': msg}, ensure_ascii=False)}\n\n"
 
-        total = len(files_data)
-
         # Step 1: 提取文字
         docs = []
-        for i, fd in enumerate(files_data):
+        for fd in files_data:
             yield send(f"**Step 1** 📄 提取文字：`{fd['name']}`")
             text = extract_file_text(fd["bytes"], fd["name"])
             if not text:
@@ -59,51 +64,90 @@ async def process_ledger(files: list[UploadFile] = File(...)):
         yield send("**Step 3** 🔍 比对现有台账…")
         existing_cases = load_cases_json()
         match_idx = find_matching_case_idx(new_case, existing_cases, docs=docs)
-        yield send(f"→ {'匹配到第 ' + str(match_idx) + ' 条记录' if match_idx is not None else '未匹配，将新增'}")
+        yield send(f"→ {'匹配到第 ' + str(match_idx + 1) + ' 条记录' if match_idx is not None else '未匹配，将新增'}")
 
-        # Step 4: 合并或新增
+        # Step 4: 准备预览数据（合并但不保存）
         if match_idx is not None:
-            merged = merge_case_data(existing_cases[match_idx], new_case)
-            existing_cases[match_idx] = merged
-            case_name = merged.get("案件名称", "")
-            stage_summary = "、".join(s["审级"] for s in merged.get("stages", []))
-            action_text = f"识别为**已有案件**「{case_name}」，已更新（当前审级：{stage_summary or '无'}）"
+            preview_case = merge_case_data(existing_cases[match_idx], new_case)
+            case_name = preview_case.get("案件名称", "")
+            stage_summary = "、".join(s["审级"] for s in preview_case.get("stages", []))
+            action_text = f"已有案件「{case_name}」，将更新（审级：{stage_summary or '无'}）"
+            is_new = False
         else:
             if not new_case.get("案件名称"):
                 new_case["案件名称"] = files_data[0]["name"]
-            existing_cases.append(new_case)
-            case_name = new_case.get("案件名称", "")
-            action_text = f"识别为**新案件**「{case_name}」，已添加至台账"
+            preview_case = new_case
+            case_name = preview_case.get("案件名称", "")
+            action_text = f"新案件「{case_name}」，将新增至台账"
+            is_new = True
 
-        # Step 5: 归档文书
+        # Step 5: 归档文书（归档不可逆，提前执行）
         yield send("📁 归档文书文件…")
         archive_dir = archive_legal_docs(files_data, docs, case_name)
+        yield send(f"→ 已归档至：`{archive_dir}`")
 
-        # Step 6: 保存
-        yield send("💾 保存台账…")
-        save_cases_json(existing_cases)
-        Path(LEDGER_OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+        yield send("✅ 提取完成，等待确认…")
 
-        # 写 Excel
-        try:
-            from utils.write_excel import write_ledger as write_legal_ledger
-            write_legal_ledger(existing_cases, LEDGER_EXCEL_PATH)
-        except Exception as e:
-            yield send(f"⚠️ Excel 写入失败：{e}")
-
-        reply = (
-            f"✅ {action_text}\n\n"
-            f"📊 台账共 **{len(existing_cases)}** 个案件，Excel 已更新。\n\n"
-            f"📁 文书已归档至：`{archive_dir}`"
-        )
-        history = load_history()
-        history.append({"role": "assistant", "content": reply})
-        save_history(history)
-
-        yield f"data: {json.dumps({'done': True, 'reply': reply, 'case_count': len(existing_cases), 'archive_dir': archive_dir}, ensure_ascii=False)}\n\n"
+        preview_payload = {
+            "preview": True,
+            "case_data": preview_case,
+            "match_idx": match_idx,
+            "is_new": is_new,
+            "action_text": action_text,
+            "archive_dir": archive_dir,
+            "existing_count": len(existing_cases),
+        }
+        yield f"data: {json.dumps(preview_payload, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
+
+# ── 确认写入台账 ──────────────────────────────────────────────
+
+class LedgerWriteRequest(BaseModel):
+    case_data: dict
+    match_idx: int | None
+    archive_dir: str
+
+
+@router.post("/write")
+def write_ledger_confirm(req: LedgerWriteRequest):
+    """
+    用户确认后将案件数据写入 cases.json 和 Excel。
+    """
+    existing_cases = load_cases_json()
+
+    if req.match_idx is not None and 0 <= req.match_idx < len(existing_cases):
+        existing_cases[req.match_idx] = req.case_data
+        action_text = f"已更新案件「{req.case_data.get('案件名称', '')}」"
+        is_new = False
+    else:
+        existing_cases.append(req.case_data)
+        action_text = f"已新增案件「{req.case_data.get('案件名称', '')}」"
+        is_new = True
+
+    save_cases_json(existing_cases)
+    Path(LEDGER_OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+
+    try:
+        from utils.write_excel import write_ledger as write_legal_ledger
+        write_legal_ledger(existing_cases, LEDGER_EXCEL_PATH)
+    except Exception as e:
+        pass  # Excel 写入失败不阻断流程
+
+    reply = (
+        f"✅ {action_text}\n\n"
+        f"📊 台账共 **{len(existing_cases)}** 个案件，Excel 已更新。\n\n"
+        f"📁 文书已归档至：`{req.archive_dir}`"
+    )
+    history = load_history()
+    history.append({"role": "assistant", "content": reply})
+    save_history(history)
+
+    return {"ok": True, "case_count": len(existing_cases), "reply": reply}
+
+
+# ── 清空台账 ──────────────────────────────────────────────────
 
 @router.post("/clear")
 def clear_ledger():
@@ -120,6 +164,8 @@ def clear_ledger():
     save_history(history)
     return {"message": msg}
 
+
+# ── 下载 Excel ────────────────────────────────────────────────
 
 @router.get("/download-excel")
 def download_ledger_excel():

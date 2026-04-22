@@ -2,26 +2,32 @@ import os
 import tempfile
 from fastapi import APIRouter, UploadFile, File, Form
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
-from config import CHAT_HISTORY_PATH
 from routers.chat import load_history, save_history
 
 router = APIRouter(prefix="/api/training", tags=["training"])
 
 
-@router.post("/process")
-async def process_training(
+# ── 提取（不写入台账）────────────────────────────────────────
+
+@router.post("/extract")
+async def extract_training(
     notice_pdf: UploadFile = File(...),
     signin_img: UploadFile = File(...),
     department: str = Form(""),
 ):
+    """
+    提取培训信息并归档文件，但不写入 Excel。
+    返回提取结果供前端展示确认。
+    """
     import sys
     sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
     from utils.pdf_reader import extract_pdf_text
     from utils.image_analyzer import count_attendees
     from utils.classifier import classify_training
     from utils.archiver import archive_files
-    from utils.excel_writer import append_record, EXCEL_PATH
+    from utils.excel_writer import EXCEL_PATH
 
     notice_bytes = await notice_pdf.read()
     signin_bytes = await signin_img.read()
@@ -44,56 +50,70 @@ async def process_training(
             date=sign_in_info["date"],
             topic=sign_in_info["topic"],
         )
-        append_record(
-            date=sign_in_info["date"],
-            topic=sign_in_info["topic"],
-            location=sign_in_info["location"],
-            department=department,
-            count=sign_in_info["count"],
-            category=category,
-            archive_path=archive_path,
-        )
 
-    confidence = sign_in_info.get("confidence", "high")
-    reflection_note = sign_in_info.get("reflection_note", "")
-
-    result = {
-        "topic": sign_in_info["topic"] or "未识别",
-        "location": sign_in_info["location"] or "未识别",
-        "date": sign_in_info["date"] or "未识别",
-        "department": department or "未填写",
+    return {
+        "topic": sign_in_info["topic"] or "",
+        "location": sign_in_info["location"] or "",
+        "date": sign_in_info["date"] or "",
+        "department": department or "",
         "count": sign_in_info["count"],
         "category": category,
         "archive_path": archive_path,
         "excel_path": EXCEL_PATH,
-        "confidence": confidence,
-        "reflection_note": reflection_note,
+        "confidence": sign_in_info.get("confidence", "high"),
+        "reflection_note": sign_in_info.get("reflection_note", ""),
     }
 
-    # 置信度标记
-    confidence_badge = "🟢 高置信度" if confidence == "high" else "🟡 低置信度（建议人工复核）"
 
-    # 追加到对话历史
-    reply = (
-        f"✅ 处理完成！\n\n"
-        f"| 字段 | 内容 |\n|------|------|\n"
-        f"| 培训主题 | {result['topic']} |\n"
-        f"| 培训地点 | {result['location']} |\n"
-        f"| 培训日期 | {result['date']} |\n"
-        f"| 主办部门 | {result['department']} |\n"
-        f"| 参与人数 | **{result['count']} 人** |\n"
-        f"| 培训类别 | {result['category']} |\n"
-        f"| 归档路径 | `{result['archive_path']}` |\n"
-        f"| 人数置信度 | {confidence_badge} |"
+# ── 确认写入台账 ──────────────────────────────────────────────
+
+class TrainingWriteRequest(BaseModel):
+    topic: str
+    location: str
+    date: str
+    department: str
+    count: int
+    category: str
+    archive_path: str
+
+
+@router.post("/write")
+def write_training(req: TrainingWriteRequest):
+    """
+    用户确认后写入 Excel 台账并更新对话历史。
+    """
+    from utils.excel_writer import append_record, EXCEL_PATH
+
+    append_record(
+        date=req.date,
+        topic=req.topic,
+        location=req.location,
+        department=req.department,
+        count=req.count,
+        category=req.category,
+        archive_path=req.archive_path,
     )
-    if reflection_note:
-        reply += f"\n\n> 🔍 **反思核查**：{reflection_note}"
+
+    confidence_badge = "🟢 高置信度"  # 用户已确认，视为高置信
+    reply = (
+        f"✅ 培训记录已写入台账！\n\n"
+        f"| 字段 | 内容 |\n|------|------|\n"
+        f"| 培训主题 | {req.topic} |\n"
+        f"| 培训地点 | {req.location} |\n"
+        f"| 培训日期 | {req.date} |\n"
+        f"| 主办部门 | {req.department or '未填写'} |\n"
+        f"| 参与人数 | **{req.count} 人** |\n"
+        f"| 培训类别 | {req.category} |\n"
+        f"| 归档路径 | `{req.archive_path}` |"
+    )
     history = load_history()
     history.append({"role": "assistant", "content": reply})
     save_history(history)
 
-    return result
+    return {"ok": True, "excel_path": EXCEL_PATH}
 
+
+# ── 下载统计表 ────────────────────────────────────────────────
 
 @router.get("/download-excel")
 def download_excel():

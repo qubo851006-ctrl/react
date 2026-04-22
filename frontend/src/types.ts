@@ -23,4 +23,35 @@ export interface TrainingResult {
   category: string
   archive_path: string
   excel_path: string
+  confidence: 'high' | 'low'
+  reflection_note: string
+}
+
+export interface LedgerStage {
+  审级: string
+  处理结果: string
+}
+
+export interface LedgerCaseData {
+  案件名称: string
+  案件发生时间: string | null
+  案由: string
+  诉讼主体: string
+  主诉被诉: string
+  标的金额: number | null
+  基本情况: string
+  生效判决日期: string | null
+  强制执行时间: string | null
+  服务律所: string | null
+  stages: LedgerStage[]
+  案号列表: string[]
+}
+
+export interface LedgerPreview {
+  case_data: LedgerCaseData
+  match_idx: number | null
+  is_new: boolean
+  action_text: string
+  archive_dir: string
+  existing_count: number
 }

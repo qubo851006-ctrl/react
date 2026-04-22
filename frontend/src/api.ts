@@ -1,3 +1,5 @@
+import type { TrainingResult, LedgerPreview, LedgerCaseData } from './types'
+
 const BASE = '/api'
 
 export async function getHistory() {
@@ -18,16 +20,28 @@ export async function sendChat(message: string, useKb: boolean, kbConvId: string
   return r.json()
 }
 
-export async function processTraining(
+// ── 培训统计 ──────────────────────────────────────────────────
+
+export async function extractTraining(
   noticePdf: File,
   signinImg: File,
   department: string,
-) {
+): Promise<TrainingResult> {
   const form = new FormData()
   form.append('notice_pdf', noticePdf)
   form.append('signin_img', signinImg)
   form.append('department', department)
-  const r = await fetch(`${BASE}/training/process`, { method: 'POST', body: form })
+  const r = await fetch(`${BASE}/training/extract`, { method: 'POST', body: form })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+export async function writeTraining(data: Omit<TrainingResult, 'excel_path' | 'confidence' | 'reflection_note'>) {
+  const r = await fetch(`${BASE}/training/write`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
   if (!r.ok) throw new Error(await r.text())
   return r.json()
 }
@@ -36,20 +50,22 @@ export function downloadTrainingExcel() {
   window.open(`${BASE}/training/download-excel`, '_blank')
 }
 
-export async function processLedger(
+// ── 案件台账 ──────────────────────────────────────────────────
+
+export async function extractLedger(
   files: File[],
   onLog: (log: string) => void,
-): Promise<{ reply: string; case_count: number; archive_dir: string }> {
+): Promise<LedgerPreview> {
   const form = new FormData()
   for (const f of files) form.append('files', f)
 
-  const resp = await fetch(`${BASE}/ledger/process`, { method: 'POST', body: form })
+  const resp = await fetch(`${BASE}/ledger/extract`, { method: 'POST', body: form })
   if (!resp.ok) throw new Error(await resp.text())
 
   const reader = resp.body!.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
-  let finalData: any = null
+  let previewData: any = null
 
   while (true) {
     const { done, value } = await reader.read()
@@ -62,11 +78,25 @@ export async function processLedger(
       try {
         const data = JSON.parse(line.slice(6))
         if (data.log) onLog(data.log)
-        if (data.done) finalData = data
-      } catch {/* ignore */}
+        if (data.preview) previewData = data
+      } catch { /* ignore */ }
     }
   }
-  return finalData
+  return previewData
+}
+
+export async function writeLedger(
+  caseData: LedgerCaseData,
+  matchIdx: number | null,
+  archiveDir: string,
+): Promise<{ ok: boolean; case_count: number; reply: string }> {
+  const r = await fetch(`${BASE}/ledger/write`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ case_data: caseData, match_idx: matchIdx, archive_dir: archiveDir }),
+  })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
 }
 
 export async function clearLedger() {
@@ -77,6 +107,8 @@ export async function clearLedger() {
 export function downloadLedgerExcel() {
   window.open(`${BASE}/ledger/download-excel`, '_blank')
 }
+
+// ── 授权请示 ──────────────────────────────────────────────────
 
 export async function processAuthRequest(pdfFile: File) {
   const form = new FormData()
