@@ -54,6 +54,9 @@ async def process_training(
             archive_path=archive_path,
         )
 
+    confidence = sign_in_info.get("confidence", "high")
+    reflection_note = sign_in_info.get("reflection_note", "")
+
     result = {
         "topic": sign_in_info["topic"] or "未识别",
         "location": sign_in_info["location"] or "未识别",
@@ -63,7 +66,12 @@ async def process_training(
         "category": category,
         "archive_path": archive_path,
         "excel_path": EXCEL_PATH,
+        "confidence": confidence,
+        "reflection_note": reflection_note,
     }
+
+    # 置信度标记
+    confidence_badge = "🟢 高置信度" if confidence == "high" else "🟡 低置信度（建议人工复核）"
 
     # 追加到对话历史
     reply = (
@@ -75,8 +83,11 @@ async def process_training(
         f"| 主办部门 | {result['department']} |\n"
         f"| 参与人数 | **{result['count']} 人** |\n"
         f"| 培训类别 | {result['category']} |\n"
-        f"| 归档路径 | `{result['archive_path']}` |"
+        f"| 归档路径 | `{result['archive_path']}` |\n"
+        f"| 人数置信度 | {confidence_badge} |"
     )
+    if reflection_note:
+        reply += f"\n\n> 🔍 **反思核查**：{reflection_note}"
     history = load_history()
     history.append({"role": "assistant", "content": reply})
     save_history(history)
