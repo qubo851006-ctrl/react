@@ -26,15 +26,6 @@ export default function App() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, stage])
 
-  useEffect(() => {
-    if (stage === 'download_training_excel') {
-      downloadTrainingExcel()
-      setStage('idle')
-    } else if (stage === 'download_ledger_excel') {
-      downloadLedgerExcel()
-      setStage('idle')
-    }
-  }, [stage])
 
   function addMessage(role: 'user' | 'assistant', content: string) {
     setMessages(prev => [...prev, { role, content }])
@@ -106,6 +97,7 @@ export default function App() {
   }
 
   const isIdle = stage === 'idle'
+  const isDownloadStage = stage === 'download_training_excel' || stage === 'download_ledger_excel'
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-slate-950">
@@ -152,6 +144,29 @@ export default function App() {
             />
           )}
 
+          {stage === 'download_training_excel' && (
+            <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5 my-3">
+              <div className="text-sm text-slate-300 mb-3">点击下载培训统计表：</div>
+              <button
+                onClick={() => { downloadTrainingExcel(); setStage('idle') }}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg transition-colors"
+              >
+                📥 下载培训统计表 Excel
+              </button>
+            </div>
+          )}
+          {stage === 'download_ledger_excel' && (
+            <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5 my-3">
+              <div className="text-sm text-slate-300 mb-3">点击下载案件台账：</div>
+              <button
+                onClick={() => { downloadLedgerExcel(); setStage('idle') }}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg transition-colors"
+              >
+                📥 下载案件台账 Excel
+              </button>
+            </div>
+          )}
+
           {stage === 'thinking' && (
             <div className="flex items-center gap-2 text-slate-500 text-sm mb-4">
               <div className="flex gap-1">
@@ -174,8 +189,8 @@ export default function App() {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
-              placeholder={isIdle ? '有什么可以帮您？' : '请完成当前操作…'}
-              disabled={!isIdle || sending}
+              placeholder={isIdle || isDownloadStage ? '有什么可以帮您？' : '请完成当前操作…'}
+              disabled={(!isIdle && !isDownloadStage) || sending}
               className="
                 flex-1 bg-slate-800 border border-slate-700 rounded-xl
                 px-4 py-3 text-sm text-white placeholder-slate-500
@@ -185,7 +200,7 @@ export default function App() {
             />
             <button
               onClick={handleSend}
-              disabled={!isIdle || !input.trim() || sending}
+              disabled={(!isIdle && !isDownloadStage) || !input.trim() || sending}
               className="
                 px-4 py-3 bg-indigo-600 hover:bg-indigo-500
                 disabled:opacity-40 disabled:cursor-not-allowed
