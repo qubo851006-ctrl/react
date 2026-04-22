@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import type { Message, Stage } from './types'
-import { getHistory, clearHistory, sendChat, clearLedger } from './api'
+import { getHistory, clearHistory, sendChat, clearLedger, downloadTrainingExcel, downloadLedgerExcel } from './api'
 import Sidebar from './components/Sidebar'
 import ChatMessage from './components/ChatMessage'
 import TrainingFlow from './components/TrainingFlow'
@@ -25,6 +25,16 @@ export default function App() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, stage])
+
+  useEffect(() => {
+    if (stage === 'download_training_excel') {
+      downloadTrainingExcel()
+      setStage('idle')
+    } else if (stage === 'download_ledger_excel') {
+      downloadLedgerExcel()
+      setStage('idle')
+    }
+  }, [stage])
 
   function addMessage(role: 'user' | 'assistant', content: string) {
     setMessages(prev => [...prev, { role, content }])

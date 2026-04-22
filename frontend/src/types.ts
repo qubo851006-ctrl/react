@@ -8,6 +8,8 @@ export type Stage =
   | 'processing_ledger'
   | 'waiting_auth_file'
   | 'processing_auth'
+  | 'download_training_excel'
+  | 'download_ledger_excel'
 
 export interface Message {
   role: 'user' | 'assistant'

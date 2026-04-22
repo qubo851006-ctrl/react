@@ -145,6 +145,26 @@ def chat(req: ChatRequest):
         save_history(history)
         return {"reply": reply, "next_stage": "waiting_auth_file", "kb_conversation_id": ""}
 
+    if detect_intent(
+        '你是一个意图识别助手。判断用户的消息是否表达了想要下载或获取培训统计表、培训记录Excel的意图。'
+        '包括：下载统计表、导出培训记录、获取培训Excel等。只回复 YES 或 NO。'
+    ):
+        reply = "📥 正在为您打开培训统计表下载…"
+        history.append({"role": "user", "content": req.message})
+        history.append({"role": "assistant", "content": reply})
+        save_history(history)
+        return {"reply": reply, "next_stage": "download_training_excel", "kb_conversation_id": ""}
+
+    if detect_intent(
+        '你是一个意图识别助手。判断用户的消息是否表达了想要下载或获取案件台账、诉讼台账Excel的意图。'
+        '包括：下载台账、导出案件记录、获取台账Excel等。只回复 YES 或 NO。'
+    ):
+        reply = "📥 正在为您打开案件台账下载…"
+        history.append({"role": "user", "content": req.message})
+        history.append({"role": "assistant", "content": reply})
+        save_history(history)
+        return {"reply": reply, "next_stage": "download_ledger_excel", "kb_conversation_id": ""}
+
     # 通用对话
     system_prompt = (
         '你是一个培训统计助手，服务于企业内部培训管理工作。'
