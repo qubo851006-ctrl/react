@@ -1,0 +1,20 @@
+import os
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
+MODEL_CHAT   = os.getenv("MODEL_CHAT",   "glm-5-outside")
+MODEL_VISION = os.getenv("MODEL_VISION", "qwen2.5-vl-72b")
+
+AIRCHINA_API_KEY  = os.getenv("AIRCHINA_API_KEY",  "")
+AIRCHINA_BASE_URL = os.getenv("AIRCHINA_BASE_URL",  "")
+ZHISHU_API_KEY    = os.getenv("ZHISHU_API_KEY",     "")
+ZHISHU_BASE_URL   = os.getenv("ZHISHU_BASE_URL",    "")
+
+# Data directories (shared with training-manager)
+DATA_ROOT          = r"D:\claude\training-manager"
+CHAT_HISTORY_PATH  = os.path.join(DATA_ROOT, "chat_history.json")
+LEDGER_OUTPUT_DIR  = os.path.join(DATA_ROOT, "案件台账")
+LEDGER_JSON_PATH   = os.path.join(DATA_ROOT, "案件台账", "cases.json")
+LEDGER_EXCEL_PATH  = os.path.join(DATA_ROOT, "案件台账", "诉讼案件台账.xlsx")
+LEGAL_ARCHIVE_ROOT = os.path.join(DATA_ROOT, "案件文书")
