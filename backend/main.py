@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from routers import chat, training, ledger, auth_request
+from routers import chat, training, ledger, auth_request, ledger_merge
 
 app = FastAPI(title="Training Manager API")
 
@@ -24,6 +24,7 @@ app.include_router(chat.router)
 app.include_router(training.router)
 app.include_router(ledger.router)
 app.include_router(auth_request.router)
+app.include_router(ledger_merge.router)
 
 
 @app.get("/api/health")

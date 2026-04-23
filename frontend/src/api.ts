@@ -108,6 +108,35 @@ export function downloadLedgerExcel() {
   window.open(`${BASE}/ledger/download-excel`, '_blank')
 }
 
+// ── 三台账合并 ────────────────────────────────────────────────
+
+export interface MergeStats {
+  total_contract: number
+  matched_purchase: number
+  matched_finance: number
+  fully_matched: number
+  partial_matched: number
+  unmatched: number
+}
+
+export async function mergeLedgers(
+  contractFile: File,
+  purchaseFile: File | null,
+  financeFile: File | null,
+): Promise<MergeStats> {
+  const form = new FormData()
+  form.append('contract_file', contractFile)
+  if (purchaseFile) form.append('purchase_file', purchaseFile)
+  if (financeFile) form.append('finance_file', financeFile)
+  const r = await fetch(`${BASE}/ledger-merge/merge`, { method: 'POST', body: form })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+export function downloadMergedExcel() {
+  window.open(`${BASE}/ledger-merge/download`, '_blank')
+}
+
 // ── 授权请示 ──────────────────────────────────────────────────
 
 export async function processAuthRequest(pdfFile: File) {

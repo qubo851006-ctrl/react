@@ -6,6 +6,7 @@ import ChatMessage from './components/ChatMessage'
 import TrainingFlow from './components/TrainingFlow'
 import LedgerFlow from './components/LedgerFlow'
 import AuthFlow from './components/AuthFlow'
+import LedgerMergeFlow from './components/LedgerMergeFlow'
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([])
@@ -51,7 +52,7 @@ export default function App() {
     }
   }
 
-  function triggerSkill(skill: 'training' | 'ledger' | 'auth') {
+  function triggerSkill(skill: 'training' | 'ledger' | 'auth' | 'merge') {
     const map = {
       training: {
         msg: '📊 培训统计及归档',
@@ -67,6 +68,11 @@ export default function App() {
         msg: '📝 授权请示起草',
         reply: '好的！请上传**呈批件 PDF**，系统将自动提取关键信息并生成授权请示 Word 文档。\n\n- 支持文字版 PDF（直接提取）\n- 支持扫描版 PDF（自动 OCR 识别）',
         stage: 'waiting_auth_file' as Stage,
+      },
+      merge: {
+        msg: '🔀 三台账合并',
+        reply: '好的！请分别上传三个系统导出的 Excel 台账：\n\n- 📘 **合同系统台账**（必填，作为合并主键）\n- 📗 **采购系统台账**（可选）\n- 📙 **财务系统台账**（可选）\n\n系统将以合同编号为关键字段自动合并，支持大小写、全角括号等差异的模糊匹配。',
+        stage: 'waiting_ledger_merge_files' as Stage,
       },
     }
     const { msg, reply, stage: nextStage } = map[skill]
@@ -139,6 +145,12 @@ export default function App() {
           )}
           {stage === 'waiting_auth_file' && (
             <AuthFlow
+              onComplete={reply => { addMessage('assistant', reply); setStage('idle') }}
+              onCancel={handleCancel}
+            />
+          )}
+          {stage === 'waiting_ledger_merge_files' && (
+            <LedgerMergeFlow
               onComplete={reply => { addMessage('assistant', reply); setStage('idle') }}
               onCancel={handleCancel}
             />
