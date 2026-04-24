@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 from docx import Document
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 
 warnings.filterwarnings("ignore")
 load_dotenv(override=True)
@@ -71,21 +73,16 @@ _DRAFT_PROMPT_TMPL = (
     "- \u9879\u76ee\u6982\u51b5\uff1a{xg}\n"
     "- \u603b\u6295\u8d44\u91d1\u989d\uff1a{zj}\n"
     "- \u88ab\u6388\u6743\u5355\u4f4d\uff1a{bq}\n"
-    "- \u6388\u6743\u4e8b\u9879\uff1a\n{sq}\n"
-    "- \u62df\u7a3f\u90e8\u95e8\uff1a{zd}\n"
-    "- \u6587\u4ef6\u65e5\u671f\uff1a{rq}\n\n"
+    "- \u6388\u6743\u4e8b\u9879\uff1a\n{sq}\n\n"
     "\u6309\u4ee5\u4e0b\u683c\u5f0f\u751f\u6210\uff0c\u53ea\u8f93\u51fa\u6587\u6863\u6b63\u6587\uff0c\u4e0d\u8981\u6709\u4efb\u4f55\u89e3\u91ca\uff1a\n\n"
     "\u6807\u9898\uff1a\u5173\u4e8e[{xm_short}]\u76f8\u5173\u5de5\u4f5c\u6388\u6743\u7684\u8bf7\u793a\n\n"
-    "\u603b\u88c1\uff1a\n\n"
     "\u4e00\u3001\u9879\u76ee\u6982\u51b5\n"
     "[\u5f15\u7528\u5448\u6279\u4ef6\u6587\u4ef6\u7f16\u53f7\uff0c\u7b80\u8ff0\u9879\u76ee\u80cc\u666f\u3001\u89c4\u6a21\u53ca\u6295\u8d44\u60c5\u51b5]\n\n"
     "\u4e8c\u3001\u6388\u6743\u4e8b\u9879\n"
     "1. [\u5c06\u6388\u6743\u4e8b\u9879\u5c55\u5f00\uff0c\u63aa\u8bcd\u6b63\u5f0f\u5b8c\u6574\uff0c\u6709\u5177\u4f53\u6743\u9650\u8fb9\u754c\uff0c\u6bcf\u6761\u4e0d\u5c11\u4e8e30\u5b57]\n"
     "2. ...\n\n"
     "\u4e09\u3001\u8bf7\u793a\u610f\u89c1\n"
-    "\u4ee5\u4e0a\u8bf7\u793a\u59a5\u5426\uff0c\u8bf7\u6279\u793a\u3002\n\n"
-    "{zd}\n"
-    "{rq}"
+    "\u4ee5\u4e0a\u8bf7\u793a\u59a5\u5426\uff0c\u8bf7\u6279\u793a\u3002"
 )
 
 
@@ -129,8 +126,6 @@ def draft_auth_request(info):
         .replace("{zj}", info.get("\u603b\u6295\u8d44\u91d1\u989d") or "\uff08\u672a\u63d0\u53d6\u5230\uff09")
         .replace("{bq}", info.get("\u88ab\u6388\u6743\u5355\u4f4d") or "\uff08\u672a\u63d0\u53d6\u5230\uff09")
         .replace("{sq}", items_text)
-        .replace("{zd}", info.get("\u62df\u7a3f\u90e8\u95e8") or "\uff08\u62df\u7a3f\u90e8\u95e8\uff09")
-        .replace("{rq}", info.get("\u6587\u4ef6\u65e5\u671f") or "\uff08\u6587\u4ef6\u65e5\u671f\uff09")
     )
     resp = _get_client().chat.completions.create(
         model=MODEL_CHAT,
@@ -141,45 +136,122 @@ def draft_auth_request(info):
     return resp.choices[0].message.content.strip()
 
 
+def _set_run_font(run, cn_font, size_pt):
+    """设置正文字体：中文用 cn_font，西文用 Times New Roman。"""
+    run.font.size = Pt(size_pt)
+    rPr = run._r.get_or_add_rPr()
+    rFonts = rPr.get_or_add_rFonts()
+    rFonts.set(qn('w:ascii'),    'Times New Roman')
+    rFonts.set(qn('w:hAnsi'),   'Times New Roman')
+    rFonts.set(qn('w:eastAsia'), cn_font)
+    rFonts.set(qn('w:cs'),       cn_font)
+
+
+def _build_footer_para(para, alignment):
+    """在指定段落插入 -页码- 格式的 PAGE 域。"""
+    para.alignment = alignment
+
+    def _text_run(p, text):
+        r = OxmlElement('w:r')
+        t = OxmlElement('w:t')
+        t.text = text
+        r.append(t)
+        p._p.append(r)
+
+    def _field_run(p, fld_type):
+        r = OxmlElement('w:r')
+        fc = OxmlElement('w:fldChar')
+        fc.set(qn('w:fldCharType'), fld_type)
+        r.append(fc)
+        p._p.append(r)
+
+    def _instr_run(p, instr):
+        r = OxmlElement('w:r')
+        it = OxmlElement('w:instrText')
+        it.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+        it.text = instr
+        r.append(it)
+        p._p.append(r)
+
+    _text_run(para, '-')
+    _field_run(para, 'begin')
+    _instr_run(para, ' PAGE \\* MERGEFORMAT ')
+    _field_run(para, 'separate')
+    _text_run(para, '1')
+    _field_run(para, 'end')
+    _text_run(para, '-')
+
+
+def _setup_page_numbers(doc, section):
+    """奇数页右下、偶数页左下，格式 -n-。需启用奇偶不同页脚。"""
+    # 启用奇偶不同页眉页脚（文档级设置）
+    settings_elem = doc.settings.element
+    if settings_elem.find(qn('w:evenAndOddHeaders')) is None:
+        even_odd = OxmlElement('w:evenAndOddHeaders')
+        settings_elem.insert(0, even_odd)
+
+    # 奇数页页脚：右对齐
+    odd_footer = section.footer
+    _build_footer_para(odd_footer.paragraphs[0], WD_ALIGN_PARAGRAPH.RIGHT)
+
+    # 偶数页页脚：左对齐
+    even_footer = section.even_page_footer
+    _build_footer_para(even_footer.paragraphs[0], WD_ALIGN_PARAGRAPH.LEFT)
+
+
 def save_as_docx(content, output_path):
     doc = Document()
+
+    # ── 页面设置 ──────────────────────────────────────────────
     for section in doc.sections:
+        section.page_width    = Cm(21)
+        section.page_height   = Cm(29.7)
         section.top_margin    = Cm(2.54)
         section.bottom_margin = Cm(2.54)
         section.left_margin   = Cm(3.17)
         section.right_margin  = Cm(3.17)
+        section.footer_distance = Cm(1.75)
+        _setup_page_numbers(doc, section)
 
+    # ── 正文 ─────────────────────────────────────────────────
     for line in content.splitlines():
         line_s = line.strip()
         if not line_s:
             doc.add_paragraph("")
             continue
 
-        # title line
+        # 文件标题：标题：xxx
         if line_s.startswith("\u6807\u9898\uff1a"):
             title_text = line_s[3:].strip()
             p = doc.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = p.add_run(title_text)
-            run.bold = True
-            run.font.size = Pt(16)
+            _set_run_font(run, '\u65b9\u6b63\u5c0f\u6807\u5b8b\u7b80\u4f53', 18)   # 方正小标宋简体 18pt
 
-        # section heading (一、二、三、)
-        elif re.match(r"^[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341]+\u3001", line_s):
+        # 一级标题：一、二、三、…
+        elif re.match(r'^[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341]+\u3001', line_s):
             p = doc.add_paragraph()
             run = p.add_run(line_s)
-            run.bold = True
-            run.font.size = Pt(12)
+            _set_run_font(run, '\u9ed1\u4f53', 16)   # 黑体 16pt
 
-        # numbered list (1. 2. ...)
-        elif re.match(r"^\d+\.", line_s):
+        # 二级标题：（一）（二）…
+        elif re.match(r'^\uff08[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341]+\uff09', line_s):
             p = doc.add_paragraph()
-            p.paragraph_format.first_line_indent = Pt(24)
-            p.add_run(line_s).font.size = Pt(12)
+            run = p.add_run(line_s)
+            _set_run_font(run, '\u6977\u4f53', 16)   # 楷体 16pt
 
+        # 编号条目：1. 2. …
+        elif re.match(r'^\d+\.', line_s):
+            p = doc.add_paragraph()
+            p.paragraph_format.first_line_indent = Pt(21)
+            run = p.add_run(line_s)
+            _set_run_font(run, '\u4eff\u5b8b_GB2312', 16)  # 仿宋_GB2312 16pt
+
+        # 普通正文
         else:
             p = doc.add_paragraph()
-            p.paragraph_format.first_line_indent = Pt(24)
-            p.add_run(line_s).font.size = Pt(12)
+            p.paragraph_format.first_line_indent = Pt(21)
+            run = p.add_run(line_s)
+            _set_run_font(run, '\u4eff\u5b8b_GB2312', 16)  # 仿宋_GB2312 16pt
 
     doc.save(output_path)

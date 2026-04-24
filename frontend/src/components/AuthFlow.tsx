@@ -22,9 +22,9 @@ export default function AuthFlow({ onComplete, onCancel }: Props) {
     try {
       const res = await processAuthRequest(pdfFile)
       setResult(res)
-      onComplete(`✅ 授权请示已生成：${res.filename}`)
     } catch (e: any) {
       setError(e.message || '处理失败')
+    } finally {
       setProcessing(false)
     }
   }
@@ -52,12 +52,20 @@ export default function AuthFlow({ onComplete, onCancel }: Props) {
             <ReactMarkdown>{result.content}</ReactMarkdown>
           </div>
         </div>
-        <button
-          onClick={() => downloadDocx(result.docx_base64, result.filename)}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg transition-colors"
-        >
-          📥 下载 Word 文档
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => downloadDocx(result.docx_base64, result.filename)}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg transition-colors"
+          >
+            📥 下载 Word 文档
+          </button>
+          <button
+            onClick={() => onComplete(`✅ 授权请示已生成：${result.filename}`)}
+            className="px-4 py-2 text-slate-400 hover:text-slate-200 text-sm transition-colors"
+          >
+            完成
+          </button>
+        </div>
       </div>
     )
   }
