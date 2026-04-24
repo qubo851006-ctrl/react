@@ -7,6 +7,7 @@ import TrainingFlow from './components/TrainingFlow'
 import LedgerFlow from './components/LedgerFlow'
 import AuthFlow from './components/AuthFlow'
 import LedgerMergeFlow from './components/LedgerMergeFlow'
+import AuditFlow from './components/AuditFlow'
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([])
@@ -52,7 +53,7 @@ export default function App() {
     }
   }
 
-  function triggerSkill(skill: 'training' | 'ledger' | 'auth' | 'merge') {
+  function triggerSkill(skill: 'training' | 'ledger' | 'auth' | 'merge' | 'audit') {
     const map = {
       training: {
         msg: '📊 培训统计及归档',
@@ -73,6 +74,11 @@ export default function App() {
         msg: '🔀 三台账合并',
         reply: '好的！请分别上传三个系统导出的 Excel 台账：\n\n- 📘 **合同系统台账**（必填，作为合并主键）\n- 📗 **采购系统台账**（可选）\n- 📙 **财务系统台账**（可选）\n\n系统将以合同编号为关键字段自动合并，支持大小写、全角括号等差异的模糊匹配。',
         stage: 'waiting_ledger_merge_files' as Stage,
+      },
+      audit: {
+        msg: '🔍 审计问题分析',
+        reply: '好的！请上传**审计发现问题汇总表**（Excel 格式），系统将自动识别问题列，通过 AI 对每条问题进行**双维度分类**：\n\n- 📌 **问题类别**（内控缺陷 / 制度执行 / 资金管理 / 采购管理）\n- 🏢 **业务领域**（工程业务 / 酒店业务 / 物业管理 / 资产管理）\n\n分类完成后可审查修改，并生成可视化分析报告。',
+        stage: 'waiting_audit_file' as Stage,
       },
     }
     const { msg, reply, stage: nextStage } = map[skill]
@@ -151,6 +157,12 @@ export default function App() {
           )}
           {stage === 'waiting_ledger_merge_files' && (
             <LedgerMergeFlow
+              onComplete={reply => { addMessage('assistant', reply); setStage('idle') }}
+              onCancel={handleCancel}
+            />
+          )}
+          {stage === 'waiting_audit_file' && (
+            <AuditFlow
               onComplete={reply => { addMessage('assistant', reply); setStage('idle') }}
               onCancel={handleCancel}
             />

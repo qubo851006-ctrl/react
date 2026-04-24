@@ -3,7 +3,7 @@ import type { Stage } from '../types'
 interface Props {
   stage: Stage
   useKb: boolean
-  onSkill: (skill: 'training' | 'ledger' | 'auth' | 'merge') => void
+  onSkill: (skill: 'training' | 'ledger' | 'auth' | 'merge' | 'audit') => void
   onClearLedger: () => void
   onClearChat: () => void
   onToggleKb: (v: boolean) => void
@@ -14,6 +14,7 @@ const skills = [
   { key: 'ledger' as const,   icon: '⚖️', label: '案件台账生成',   desc: '上传法律文书，自动提取并更新台账' },
   { key: 'auth' as const,     icon: '📝', label: '授权请示起草',   desc: '上传呈批件，AI起草授权请示Word' },
   { key: 'merge' as const,    icon: '🔀', label: '三台账合并',     desc: '合并采购/合同/财务系统导出台账' },
+  { key: 'audit' as const,   icon: '🔍', label: '审计问题分析',   desc: '上传审计汇总表，AI分类并生成报告' },
 ]
 
 export default function Sidebar({ stage, useKb, onSkill, onClearLedger, onClearChat, onToggleKb }: Props) {

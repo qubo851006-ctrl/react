@@ -137,6 +137,51 @@ export function downloadMergedExcel() {
   window.open(`${BASE}/ledger-merge/download`, '_blank')
 }
 
+// ── 审计分析 ──────────────────────────────────────────────────
+
+export interface AuditRow {
+  seq: number
+  issue: string
+  description: string
+  category: string
+  domain: string
+}
+
+export interface AuditAnalysisResult {
+  rows: AuditRow[]
+  total: number
+}
+
+export async function analyzeAudit(
+  file: File,
+  categories: string[],
+  domains: string[],
+): Promise<AuditAnalysisResult> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('categories', JSON.stringify(categories))
+  form.append('domains', JSON.stringify(domains))
+  const r = await fetch(`${BASE}/audit/analyze`, { method: 'POST', body: form })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+export async function downloadAuditExcel(rows: AuditRow[], originalFilename: string) {
+  const r = await fetch(`${BASE}/audit/download`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows, original_filename: originalFilename }),
+  })
+  if (!r.ok) throw new Error(await r.text())
+  const blob = await r.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${originalFilename}_分类结果.xlsx`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 // ── 授权请示 ──────────────────────────────────────────────────
 
 export async function processAuthRequest(pdfFile: File) {

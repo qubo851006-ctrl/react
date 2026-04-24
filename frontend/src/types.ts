@@ -11,6 +11,7 @@ export type Stage =
   | 'download_training_excel'
   | 'download_ledger_excel'
   | 'waiting_ledger_merge_files'
+  | 'waiting_audit_file'
 
 export interface Message {
   role: 'user' | 'assistant'
