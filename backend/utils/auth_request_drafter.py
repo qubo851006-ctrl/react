@@ -254,10 +254,47 @@ def draft_auth_letter(info):
     return letter
 
 
+_AUTH_LEDGER_HEADERS = [
+    "序号", "编号", "经办人", "授权人", "代理人", "印章", "份数",
+    "授权起始日期", "授权终止日期", "授权内容概要", "办理时间",
+    "代理人签字版是否发送回来", "文号", "责任者", "题目", "归档日期", "页数",
+]
+
+
+def init_auth_ledger(ledger_path):
+    """若台账文件不存在则自动创建（含表头）。"""
+    import os
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    os.makedirs(os.path.dirname(ledger_path), exist_ok=True)
+    if os.path.exists(ledger_path):
+        return
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "授权委托台账"
+
+    for col, header in enumerate(_AUTH_LEDGER_HEADERS, start=1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill(fill_type="solid", fgColor="4472C4")
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    col_widths = [6, 12, 10, 22, 22, 18, 6, 14, 14, 40, 14, 18, 16, 12, 40, 12, 6]
+    for col, width in enumerate(col_widths, start=1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(col)].width = width
+    ws.row_dimensions[1].height = 22
+
+    wb.save(ledger_path)
+
+
 def record_to_ledger(info, title, ledger_path):
     """向台账 Excel 追加一行，失败静默处理。"""
     try:
         import openpyxl
+        from openpyxl.styles import Alignment as XlAlign
+        init_auth_ledger(ledger_path)
         wb = openpyxl.load_workbook(ledger_path)
         ws = wb.active
 
@@ -293,7 +330,13 @@ def record_to_ledger(info, title, ledger_path):
             None,                   # 归档日期
             None,                   # 页数
         ]
-        ws.append(new_row)
+        next_row = ws.max_row + 1
+        for col, value in enumerate(new_row, start=1):
+            cell = ws.cell(row=next_row, column=col, value=value)
+            cell.alignment = XlAlign(vertical="center")
+            if next_row % 2 == 0:
+                from openpyxl.styles import PatternFill
+                cell.fill = PatternFill(fill_type="solid", fgColor="DCE6F1")
         wb.save(ledger_path)
         return True
     except Exception:

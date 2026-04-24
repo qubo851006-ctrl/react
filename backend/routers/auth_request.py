@@ -5,6 +5,7 @@ import tempfile
 from fastapi import APIRouter, UploadFile, File
 
 from routers.chat import load_history, save_history
+from config import AUTH_LEDGER_PATH
 
 router = APIRouter(prefix="/api/auth-request", tags=["auth-request"])
 
@@ -68,17 +69,14 @@ async def process_auth_request(pdf_file: UploadFile = File(...)):
         project_name[:15] if len(project_name) > 15 else project_name
     )
 
-    # 记录台账（路径未配置时静默跳过）
-    ledger_path = os.getenv("AUTH_LEDGER_PATH", "")
-    ledger_updated = False
+    # 记录台账（自动创建文件，路径由 config.AUTH_LEDGER_PATH 决定）
+    ledger_updated = record_to_ledger(info, title, AUTH_LEDGER_PATH)
     ledger_b64 = None
     ledger_filename = None
-    if ledger_path and os.path.exists(ledger_path):
-        ledger_updated = record_to_ledger(info, title, ledger_path)
-        if ledger_updated:
-            with open(ledger_path, "rb") as f:
-                ledger_b64 = base64.b64encode(f.read()).decode()
-            ledger_filename = os.path.basename(ledger_path)
+    if ledger_updated:
+        with open(AUTH_LEDGER_PATH, "rb") as f:
+            ledger_b64 = base64.b64encode(f.read()).decode()
+        ledger_filename = os.path.basename(AUTH_LEDGER_PATH)
 
     reply = "✅ 授权请示及授权书已生成！\n\n---\n\n{}".format(auth_content)
     history = load_history()
