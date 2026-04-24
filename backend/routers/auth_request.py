@@ -13,7 +13,14 @@ router = APIRouter(prefix="/api/auth-request", tags=["auth-request"])
 async def process_auth_request(pdf_file: UploadFile = File(...)):
     import sys
     sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-    from utils.auth_request_drafter import extract_approval_info, draft_auth_request, save_as_docx
+    from utils.auth_request_drafter import (
+        extract_approval_info,
+        draft_auth_request,
+        draft_auth_letter,
+        save_as_docx,
+        save_auth_letter_as_docx,
+        record_to_ledger,
+    )
     from ledger_helpers import ocr_pdf_with_vision
     import pdfplumber
 
@@ -34,10 +41,10 @@ async def process_auth_request(pdf_file: UploadFile = File(...)):
     # AI 提取字段
     info = extract_approval_info(pdf_text)
 
-    # 生成请示内容
+    # 生成授权请示内容
     auth_content = draft_auth_request(info)
 
-    # 生成 Word 文档并转 base64
+    # 生成授权请示 Word
     with tempfile.NamedTemporaryFile(suffix=".docx", delete=False, prefix="授权请示_") as tmp:
         docx_path = tmp.name
     save_as_docx(auth_content, docx_path)
@@ -45,9 +52,29 @@ async def process_auth_request(pdf_file: UploadFile = File(...)):
         docx_b64 = base64.b64encode(f.read()).decode()
     os.unlink(docx_path)
 
-    project_name = info.get("项目名称") or "授权请示"
+    # 生成授权书内容
+    letter_content = draft_auth_letter(info)
 
-    reply = f"✅ 授权请示已生成！\n\n---\n\n{auth_content}"
+    # 生成授权书 Word
+    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False, prefix="授权书_") as tmp:
+        letter_path = tmp.name
+    save_auth_letter_as_docx(letter_content, letter_path)
+    with open(letter_path, "rb") as f:
+        letter_b64 = base64.b64encode(f.read()).decode()
+    os.unlink(letter_path)
+
+    project_name = info.get("项目名称") or "授权请示"
+    title = "关于{}相关工作授权的请示".format(
+        project_name[:15] if len(project_name) > 15 else project_name
+    )
+
+    # 记录台账（路径未配置时静默跳过）
+    ledger_path = os.getenv("AUTH_LEDGER_PATH", "")
+    ledger_updated = False
+    if ledger_path and os.path.exists(ledger_path):
+        ledger_updated = record_to_ledger(info, title, ledger_path)
+
+    reply = "✅ 授权请示及授权书已生成！\n\n---\n\n{}".format(auth_content)
     history = load_history()
     history.append({"role": "assistant", "content": reply})
     save_history(history)
@@ -55,6 +82,10 @@ async def process_auth_request(pdf_file: UploadFile = File(...)):
     return {
         "content": auth_content,
         "docx_base64": docx_b64,
-        "filename": f"授权请示_{project_name[:20]}.docx",
+        "filename": "授权请示_{}.docx".format(project_name[:20]),
+        "letter_content": letter_content,
+        "letter_base64": letter_b64,
+        "letter_filename": "授权书_{}.docx".format(project_name[:20]),
+        "ledger_updated": ledger_updated,
         "info": info,
     }

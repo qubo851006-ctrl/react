@@ -33,57 +33,89 @@ def _parse_json(raw):
     return json.loads(raw)
 
 
-_EXTRACT_PROMPT_TMPL = (
-    "\u4f60\u662f\u4e00\u4e2a\u516c\u6587\u5904\u7406\u4e13\u5bb6\u3002"
-    "\u8bf7\u4ece\u4ee5\u4e0b\u5448\u6279\u4ef6\u6587\u672c\u4e2d\u63d0\u53d6\u5173\u952e\u4fe1\u606f"
-    "\uff0c\u4ee5JSON\u683c\u5f0f\u8fd4\u56de\u3002\n\n"
-    "\u8981\u6c42\uff1a\n"
-    "- \u6587\u4ef6\u7f16\u53f7\uff1a\u5982\u300e\u4e2d\u822a\u96c6\u56e2\u8d44\u4ea7\u5475[2024]231\u53f7\u300f"
-    "\uff0c\u627e\u4e0d\u5230\u586bnull\n"
-    "- \u9879\u76ee\u540d\u79f0\uff1a\u9879\u76ee\u5b8c\u6574\u540d\u79f0\uff0c\u627e\u4e0d\u5230\u586bnull\n"
-    "- \u9879\u76ee\u6982\u51b5\uff1a\u542b\u89c4\u6a21\u3001\u9762\u79ef\u3001\u680b\u6570\u3001\u6295\u8d44"
-    "\u60c5\u51b5\u7b49\uff0c\u5c3d\u91cf\u5b8c\u6574\uff0c\u627e\u4e0d\u5230\u586bnull\n"
-    "- \u603b\u6295\u8d44\u91d1\u989d\uff1a\u5982\u300e\u7ea6X.XX\u4ebf\u5143\u300f\u6216\u300eXXX\u4e07\u5143\u300f"
-    "\uff0c\u627e\u4e0d\u5230\u586bnull\n"
-    "- \u88ab\u6388\u6743\u5355\u4f4d\uff1a\u627f\u529e\u8be5\u9879\u76ee\u7684\u5355\u4f4d/\u90e8\u95e8\u540d\u79f0"
-    "\uff0c\u627e\u4e0d\u5230\u586bnull\n"
-    "- \u6388\u6743\u4e8b\u9879\uff1a\u5217\u8868\u5f62\u5f0f\uff0c\u4ece\u5448\u6279\u4ef6\u4e2d\u63d0\u70bc"
-    "\u6240\u6709\u9700\u4e0a\u7ea7\u6388\u6743\u7684\u4e8b\u9879\uff0c\u6bcf\u670330\u5b57\u4ee5\u5185\n"
-    "- \u62df\u7a3f\u90e8\u95e8\uff1a\u8d77\u8349\u672c\u6587\u4ef6\u7684\u90e8\u95e8\uff0c\u627e\u4e0d\u5230\u586bnull\n"
-    "- \u6587\u4ef6\u65e5\u671f\uff1a\u6587\u4ef6\u843d\u6b3e\u65e5\u671f\uff0c\u683c\u5f0fYYYY\u5e74MM\u6708DD\u65e5"
-    "\uff0c\u627e\u4e0d\u5230\u586bnull\n"
-    "- \u4e3b\u9001\u673a\u6784\uff1a\u5982\u300e\u515a\u7ec4\u300f\u300e\u603b\u7ecf\u7406\u529e\u516c\u4f1a\u300f"
-    "\u300e\u8463\u4e8b\u4f1a\u300f\u7b49\uff0c\u627e\u4e0d\u5230\u586bnull\n\n"
-    "\u53ea\u8fd4\u56deJSON\uff0c\u4e0d\u8981\u5176\u4ed6\u6587\u5b57\uff1a\n"
-    '{"\\u6587\\u4ef6\\u7f16\\u53f7":null,"\\u9879\\u76ee\\u540d\\u79f0":null,'
-    '"\\u9879\\u76ee\\u6982\\u51b5":null,"\\u603b\\u6295\\u8d44\\u91d1\\u989d":null,'
-    '"\\u88ab\\u6388\\u6743\\u5355\\u4f4d":null,"\\u6388\\u6743\\u4e8b\\u9879":[],'
-    '"\\u62df\\u7a3f\\u90e8\\u95e8":null,"\\u6587\\u4ef6\\u65e5\\u671f":null,'
-    '"\\u4e3b\\u9001\\u673a\\u6784":null}\n\n'
-    "\u5448\u6279\u4ef6\u6587\u672c\uff08\u524d10000\u5b57\uff09\uff1a\n"
-    "{text}"
-)
+_EXTRACT_PROMPT_TMPL = """你是一个公文处理专家。请从以下呈批件文本中提取关键信息，以JSON格式返回。
 
-_DRAFT_PROMPT_TMPL = (
-    "\u4f60\u662f\u4e00\u540d\u7cbe\u901a\u56fd\u6709\u4f01\u4e1a\u516c\u6587\u5199\u4f5c\u7684\u4e13\u5bb6\u3002"
-    "\u8bf7\u6839\u636e\u4ee5\u4e0b\u4fe1\u606f\u8d77\u8349\u4e00\u4efd\u6b63\u5f0f\u7684\u6388\u6743\u8bf7\u793a\u3002\n\n"
-    "\u8f93\u5165\u4fe1\u606f\uff1a\n"
-    "- \u5448\u6279\u4ef6\u6587\u4ef6\u7f16\u53f7\uff1a{wh}\n"
-    "- \u9879\u76ee\u540d\u79f0\uff1a{xm}\n"
-    "- \u9879\u76ee\u6982\u51b5\uff1a{xg}\n"
-    "- \u603b\u6295\u8d44\u91d1\u989d\uff1a{zj}\n"
-    "- \u88ab\u6388\u6743\u5355\u4f4d\uff1a{bq}\n"
-    "- \u6388\u6743\u4e8b\u9879\uff1a\n{sq}\n\n"
-    "\u6309\u4ee5\u4e0b\u683c\u5f0f\u751f\u6210\uff0c\u53ea\u8f93\u51fa\u6587\u6863\u6b63\u6587\uff0c\u4e0d\u8981\u6709\u4efb\u4f55\u89e3\u91ca\uff1a\n\n"
-    "\u6807\u9898\uff1a\u5173\u4e8e[{xm_short}]\u76f8\u5173\u5de5\u4f5c\u6388\u6743\u7684\u8bf7\u793a\n\n"
-    "\u4e00\u3001\u9879\u76ee\u6982\u51b5\n"
-    "[\u5f15\u7528\u5448\u6279\u4ef6\u6587\u4ef6\u7f16\u53f7\uff0c\u7b80\u8ff0\u9879\u76ee\u80cc\u666f\u3001\u89c4\u6a21\u53ca\u6295\u8d44\u60c5\u51b5]\n\n"
-    "\u4e8c\u3001\u6388\u6743\u4e8b\u9879\n"
-    "1. [\u5c06\u6388\u6743\u4e8b\u9879\u5c55\u5f00\uff0c\u63aa\u8bcd\u6b63\u5f0f\u5b8c\u6574\uff0c\u6709\u5177\u4f53\u6743\u9650\u8fb9\u754c\uff0c\u6bcf\u6761\u4e0d\u5c11\u4e8e30\u5b57]\n"
-    "2. ...\n\n"
-    "\u4e09\u3001\u8bf7\u793a\u610f\u89c1\n"
-    "\u4ee5\u4e0a\u8bf7\u793a\u59a5\u5426\uff0c\u8bf7\u6279\u793a\u3002"
-)
+要求：
+- 文件编号：如"中航集团资产呈〔2024〕231号"，找不到填null
+- 项目名称：项目完整名称，找不到填null
+- 项目概况：含规模、面积、栋数、投资情况等，尽量完整，找不到填null
+- 总投资金额：如"约X.XX亿元"或"XXX万元"，找不到填null
+- 被授权单位：承办该项目的单位/部门名称，找不到填null
+- 授权事项：列表形式，从呈批件中提炼所有需上级授权的事项，每条30字以内
+- 拟稿部门：起草本文件的部门，找不到填null
+- 文件日期：文件落款日期，格式YYYY年MM月DD日，找不到填null
+- 主送机构：如"党组"、"总经理办公会"、"董事会"等，找不到填null
+- 授权单位：需出具授权书的单位全称（即下级向上级授权时，下级单位的全称），找不到填null
+- 被授权上级单位：接受授权的上级单位全称，找不到填null
+- 转授权单位：被授权单位可再转委托的第三方单位，若无则填null
+- 授权期限：授权有效期的完整描述，直接摘录原文表述，找不到填null
+- 授权份数：授权书需办理的份数（整数），找不到填null
+- 印章要求：办理授权需使用的印章类型，直接摘录原文，找不到填null
+- 授权背景：从呈批件中综合提炼为何需要进行授权、授权的必要性和具体安排，1~2句话，直接综合原文内容，不编造，不套用固定句式，找不到填null
+
+只返回JSON，不要其他文字：
+{{"文件编号":null,"项目名称":null,"项目概况":null,"总投资金额":null,"被授权单位":null,"授权事项":[],"拟稿部门":null,"文件日期":null,"主送机构":null,"授权单位":null,"被授权上级单位":null,"转授权单位":null,"授权期限":null,"授权份数":null,"印章要求":null,"授权背景":null}}
+
+呈批件文本（前10000字）：
+{text}"""
+
+
+_DRAFT_PROMPT_TMPL = """你是一名精通国有企业公文写作的专家。请根据以下信息起草一份正式的授权请示。
+
+输入信息：
+- 呈批件文件编号：{wh}
+- 呈批件标题（主送机构请示内容）：{xm}
+- 授权背景（从呈批件提炼的授权原因和安排）：{bg}
+- 授权单位（出具授权书的单位）：{qdw}
+- 被授权单位：{bqdw}
+- 转授权单位（若有）：{zqdw}
+- 授权事项：
+{sq}
+- 授权期限：{qx}
+- 授权份数：{fs}
+- 印章要求：{yz}
+- 拟稿部门：{bm}
+- 文件日期：{rq}
+
+按以下格式生成，只输出文档正文，不要任何解释，不要Markdown符号，不要"标题："前缀：
+
+【来文依据段】
+根据《{xm}》（{wh}）{bg}
+
+【授权说明段】
+现拟将{qdw_short}负责开展相关工作（具体范围请补充）授权给{bqdw_short}，需由{qdw_short}出具授权委托书。
+
+【授权内容段】
+具体的授权内容包括：将上方授权事项展开为完整规范的表述，各条用分号连接，最后一条用句号结束。
+
+【实务条款】（每项单独一行，对应字段为null则跳过该行）
+授权委托期限：{qx}。
+授权办理份数：{fs}份。
+办理授权时需使用{qdw_short}公章及法定代表人签字章。
+妥否，请批示。
+
+【附件清单】
+附件：1. 授权书（{qdw_short}授权{bqdw_short}）
+{fj_extra}
+
+【落款】
+{bm}
+{rq}"""
+
+
+_AUTH_LETTER_PROMPT_TMPL = """你是一名精通国有企业公文写作的专家。请根据以下信息，生成授权书中"授权委托事项范围"段落的完整内容。
+
+授权单位：{qdw}
+被授权单位：{bqdw}
+授权事项列表：
+{sq}
+
+要求：
+- 将上述授权事项展开为完整规范的授权委托事项范围描述
+- 描述完整、边界清晰、措辞正式
+- 直接输出段落文字，不要标题，不要编号，不要Markdown
+
+只输出"授权委托事项范围"的正文内容："""
 
 
 def extract_approval_info(pdf_text):
@@ -98,35 +130,61 @@ def extract_approval_info(pdf_text):
         return _parse_json(resp.choices[0].message.content)
     except Exception:
         return {
-            "\u6587\u4ef6\u7f16\u53f7": None,
-            "\u9879\u76ee\u540d\u79f0": None,
-            "\u9879\u76ee\u6982\u51b5": None,
-            "\u603b\u6295\u8d44\u91d1\u989d": None,
-            "\u88ab\u6388\u6743\u5355\u4f4d": None,
-            "\u6388\u6743\u4e8b\u9879": [],
-            "\u62df\u7a3f\u90e8\u95e8": None,
-            "\u6587\u4ef6\u65e5\u671f": None,
-            "\u4e3b\u9001\u673a\u6784": None,
+            "文件编号": None, "项目名称": None, "项目概况": None,
+            "总投资金额": None, "被授权单位": None, "授权事项": [],
+            "拟稿部门": None, "文件日期": None, "主送机构": None,
+            "授权单位": None, "被授权上级单位": None, "转授权单位": None,
+            "授权期限": None, "授权份数": None, "印章要求": None, "授权背景": None,
         }
 
 
-def draft_auth_request(info):
-    items = info.get("\u6388\u6743\u4e8b\u9879") or []
-    items_text = "\n".join(
-        "{0}. {1}".format(i + 1, item) for i, item in enumerate(items)
-    ) if items else "\uff08\u5f85\u8865\u5145\uff09"
+def _short_name(full_name):
+    """提取括号内简称，否则取前10字。"""
+    if not full_name:
+        return full_name or "（待填写）"
+    m = re.search(r'[（(]简称(.+?)[）)]', full_name)
+    if m:
+        return m.group(1)
+    return full_name[:10] if len(full_name) > 10 else full_name
 
-    xm = info.get("\u9879\u76ee\u540d\u79f0") or "\uff08\u672a\u63d0\u53d6\u5230\uff09"
+
+def draft_auth_request(info):
+    items = info.get("授权事项") or []
+    items_text = "\n".join(
+        "{}. {}".format(i + 1, item) for i, item in enumerate(items)
+    ) if items else "（待补充）"
+
+    qdw = info.get("授权单位") or "（待填写）"
+    bqdw = info.get("被授权上级单位") or info.get("被授权单位") or "（待填写）"
+    zqdw = info.get("转授权单位")
+    qdw_short = _short_name(qdw)
+    bqdw_short = _short_name(bqdw)
+
+    # 附件额外行
+    fj_extra = ""
+    if zqdw:
+        zqdw_short = _short_name(zqdw)
+        fj_extra = "      2. 集团公司授权书（{}授权{}）".format(bqdw_short, zqdw_short)
+
     prompt = (
         _DRAFT_PROMPT_TMPL
-        .replace("{wh}", info.get("\u6587\u4ef6\u7f16\u53f7") or "\uff08\u672a\u63d0\u53d6\u5230\uff09")
-        .replace("{xm}", xm)
-        .replace("{xm_short}", xm[:10] if len(xm) > 10 else xm)
-        .replace("{xg}", info.get("\u9879\u76ee\u6982\u51b5") or "\uff08\u672a\u63d0\u53d6\u5230\uff09")
-        .replace("{zj}", info.get("\u603b\u6295\u8d44\u91d1\u989d") or "\uff08\u672a\u63d0\u53d6\u5230\uff09")
-        .replace("{bq}", info.get("\u88ab\u6388\u6743\u5355\u4f4d") or "\uff08\u672a\u63d0\u53d6\u5230\uff09")
+        .replace("{wh}", info.get("文件编号") or "（未提取到）")
+        .replace("{xm}", info.get("项目名称") or "（未提取到）")
+        .replace("{bg}", info.get("授权背景") or "根据上述文件要求，需办理相关授权手续")
+        .replace("{qdw}", qdw)
+        .replace("{bqdw}", bqdw)
+        .replace("{zqdw}", zqdw or "无")
         .replace("{sq}", items_text)
+        .replace("{qx}", info.get("授权期限") or "（待填写）")
+        .replace("{fs}", str(info.get("授权份数")) if info.get("授权份数") else "（待填写）")
+        .replace("{yz}", info.get("印章要求") or "（待填写）")
+        .replace("{bm}", info.get("拟稿部门") or "（拟稿部门）")
+        .replace("{rq}", info.get("文件日期") or "（日期）")
+        .replace("{qdw_short}", qdw_short)
+        .replace("{bqdw_short}", bqdw_short)
+        .replace("{fj_extra}", fj_extra)
     )
+
     resp = _get_client().chat.completions.create(
         model=MODEL_CHAT,
         messages=[{"role": "user", "content": prompt}],
@@ -136,8 +194,114 @@ def draft_auth_request(info):
     return resp.choices[0].message.content.strip()
 
 
+def draft_auth_letter(info):
+    """生成授权书正文（框架固定，AI只生成授权委托事项范围段落）。"""
+    items = info.get("授权事项") or []
+    items_text = "\n".join(
+        "{}. {}".format(i + 1, item) for i, item in enumerate(items)
+    ) if items else "（待补充）"
+
+    qdw = info.get("授权单位") or "（待填写）"
+    bqdw = info.get("被授权上级单位") or info.get("被授权单位") or "（待填写）"
+    qdw_short = _short_name(qdw)
+
+    # 用AI生成授权委托事项范围段落
+    scope_prompt = (
+        _AUTH_LETTER_PROMPT_TMPL
+        .replace("{qdw}", qdw)
+        .replace("{bqdw}", bqdw)
+        .replace("{sq}", items_text)
+    )
+    resp = _get_client().chat.completions.create(
+        model=MODEL_CHAT,
+        messages=[{"role": "user", "content": scope_prompt}],
+        max_tokens=2000,
+        temperature=0.2,
+    )
+    scope_text = resp.choices[0].message.content.strip()
+
+    # 年份
+    date_str = info.get("文件日期") or ""
+    year = date_str[:4] if date_str and len(date_str) >= 4 else "    "
+
+    letter = (
+        "法定代表人授权书\n\n"
+        "{qdw_short}授权字（{year}）第      号\n\n"
+        "授权单位：{qdw}\n"
+        "注册地址：\n"
+        "法定代表人：                ，职务：\n\n"
+        "被授权单位：{bqdw}\n"
+        "注册地址：\n"
+        "法定代表人：                ，职务：\n\n"
+        "授权委托事项范围：{scope}\n\n"
+        "被授权单位权限：被授权单位应在授权委托事项范围内依法合规地行使权力、履行义务。"
+        "被授权单位在授权委托事项范围内代表授权单位所签署的法律文件具有法律效力，"
+        "与授权单位的行为具有同等法律效力，授权单位予以认可。"
+        "授权单位同意，被授权单位有转委托权。\n\n"
+        "授权期限：{qx}。如{qdw}终止对被授权人的授权后，本授权书即失效。\n\n"
+        "授权单位印签：\n"
+        "法定代表人：\n"
+        "                                            {rq}"
+    ).format(
+        qdw_short=qdw_short,
+        year=year,
+        qdw=qdw,
+        bqdw=bqdw,
+        scope=scope_text,
+        qx=info.get("授权期限") or "（待填写）",
+        rq=info.get("文件日期") or "（日期）",
+    )
+    return letter
+
+
+def record_to_ledger(info, title, ledger_path):
+    """向台账 Excel 追加一行，失败静默处理。"""
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(ledger_path)
+        ws = wb.active
+
+        # 当前最大序号
+        max_seq = 0
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if row[0] is not None:
+                try:
+                    max_seq = max(max_seq, int(row[0]))
+                except (TypeError, ValueError):
+                    pass
+
+        # 授权内容概要
+        items = info.get("授权事项") or []
+        summary = "；".join(items)[:200] if items else ""
+
+        new_row = [
+            max_seq + 1,           # 序号
+            None,                   # 编号（人工填写）
+            info.get("拟稿人"),     # 经办人
+            info.get("授权单位"),   # 授权人
+            info.get("被授权上级单位") or info.get("被授权单位"),  # 代理人
+            info.get("印章要求"),   # 印章
+            info.get("授权份数"),   # 份数
+            info.get("文件日期"),   # 授权起始日期
+            info.get("授权期限"),   # 授权终止日期
+            summary,                # 授权内容概要
+            info.get("文件日期"),   # 办理时间
+            None,                   # 代理人签字版是否发送回来
+            info.get("文件编号"),   # 文号
+            None,                   # 责任者
+            title,                  # 题目
+            None,                   # 归档日期
+            None,                   # 页数
+        ]
+        ws.append(new_row)
+        wb.save(ledger_path)
+        return True
+    except Exception:
+        return False
+
+
 def _set_run_font(run, cn_font, size_pt):
-    """设置正文字体：中文用 cn_font，西文用 Times New Roman。"""
+    """设置字体：中文用 cn_font，西文用 Times New Roman。"""
     run.font.size = Pt(size_pt)
     rPr = run._r.get_or_add_rPr()
     rFonts = rPr.get_or_add_rFonts()
@@ -183,26 +347,23 @@ def _build_footer_para(para, alignment):
 
 
 def _setup_page_numbers(doc, section):
-    """奇数页右下、偶数页左下，格式 -n-。需启用奇偶不同页脚。"""
-    # 启用奇偶不同页眉页脚（文档级设置）
+    """奇数页右下、偶数页左下，格式 -n-。"""
     settings_elem = doc.settings.element
     if settings_elem.find(qn('w:evenAndOddHeaders')) is None:
         even_odd = OxmlElement('w:evenAndOddHeaders')
         settings_elem.insert(0, even_odd)
 
-    # 奇数页页脚：右对齐
     odd_footer = section.footer
     _build_footer_para(odd_footer.paragraphs[0], WD_ALIGN_PARAGRAPH.RIGHT)
 
-    # 偶数页页脚：左对齐
     even_footer = section.even_page_footer
     _build_footer_para(even_footer.paragraphs[0], WD_ALIGN_PARAGRAPH.LEFT)
 
 
 def save_as_docx(content, output_path):
+    """授权请示 Word 文档（方正小标宋/黑体/仿宋格式）。"""
     doc = Document()
 
-    # ── 页面设置 ──────────────────────────────────────────────
     for section in doc.sections:
         section.page_width    = Cm(21)
         section.page_height   = Cm(29.7)
@@ -213,45 +374,104 @@ def save_as_docx(content, output_path):
         section.footer_distance = Cm(1.75)
         _setup_page_numbers(doc, section)
 
-    # ── 正文 ─────────────────────────────────────────────────
     for line in content.splitlines():
         line_s = line.strip()
         if not line_s:
             doc.add_paragraph("")
             continue
 
-        # 文件标题：标题：xxx
-        if line_s.startswith("\u6807\u9898\uff1a"):
+        # 标题行（标题：xxx）
+        if line_s.startswith("标题："):
             title_text = line_s[3:].strip()
             p = doc.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = p.add_run(title_text)
-            _set_run_font(run, '\u65b9\u6b63\u5c0f\u6807\u5b8b\u7b80\u4f53', 18)   # 方正小标宋简体 18pt
+            _set_run_font(run, '方正小标宋简体', 18)
 
         # 一级标题：一、二、三、…
-        elif re.match(r'^[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341]+\u3001', line_s):
+        elif re.match(r'^[一二三四五六七八九十]+、', line_s):
             p = doc.add_paragraph()
             run = p.add_run(line_s)
-            _set_run_font(run, '\u9ed1\u4f53', 16)   # 黑体 16pt
+            _set_run_font(run, '黑体', 16)
 
         # 二级标题：（一）（二）…
-        elif re.match(r'^\uff08[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341]+\uff09', line_s):
+        elif re.match(r'^（[一二三四五六七八九十]+）', line_s):
             p = doc.add_paragraph()
             run = p.add_run(line_s)
-            _set_run_font(run, '\u6977\u4f53', 16)   # 楷体 16pt
+            _set_run_font(run, '楷体', 16)
 
-        # 编号条目：1. 2. …
-        elif re.match(r'^\d+\.', line_s):
+        # 附件行
+        elif line_s.startswith("附件：") or re.match(r'^附件\s*\d+', line_s):
             p = doc.add_paragraph()
-            p.paragraph_format.first_line_indent = Pt(21)
             run = p.add_run(line_s)
-            _set_run_font(run, '\u4eff\u5b8b_GB2312', 16)  # 仿宋_GB2312 16pt
+            _set_run_font(run, '仿宋_GB2312', 16)
 
         # 普通正文
         else:
             p = doc.add_paragraph()
             p.paragraph_format.first_line_indent = Pt(21)
             run = p.add_run(line_s)
-            _set_run_font(run, '\u4eff\u5b8b_GB2312', 16)  # 仿宋_GB2312 16pt
+            _set_run_font(run, '仿宋_GB2312', 16)
+
+    doc.save(output_path)
+
+
+def save_auth_letter_as_docx(content, output_path):
+    """授权书 Word 文档格式。"""
+    doc = Document()
+
+    for section in doc.sections:
+        section.page_width    = Cm(21)
+        section.page_height   = Cm(29.7)
+        section.top_margin    = Cm(2.54)
+        section.bottom_margin = Cm(2.54)
+        section.left_margin   = Cm(3.17)
+        section.right_margin  = Cm(3.17)
+
+    lines = content.splitlines()
+    for i, line in enumerate(lines):
+        line_s = line.strip()
+        if not line_s:
+            doc.add_paragraph("")
+            continue
+
+        # 主标题
+        if line_s == "法定代表人授权书":
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = p.add_run(line_s)
+            _set_run_font(run, '方正小标宋简体', 18)
+
+        # 编号行（含"授权字"）
+        elif "授权字" in line_s:
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            run = p.add_run(line_s)
+            _set_run_font(run, '仿宋_GB2312', 14)
+
+        # 字段标签行（授权单位：/被授权单位：/授权委托事项范围：等）
+        elif re.match(r'^(授权单位|被授权单位|注册地址|法定代表人|授权委托事项范围|被授权单位权限|授权期限|授权单位印签)[:：]', line_s):
+            p = doc.add_paragraph()
+            run = p.add_run(line_s)
+            _set_run_font(run, '黑体', 14)
+
+        # 签字区（纯空白 + 日期结尾）
+        elif line_s.startswith("法定代表人：") and i > 5:
+            p = doc.add_paragraph()
+            run = p.add_run(line_s)
+            _set_run_font(run, '仿宋_GB2312', 14)
+
+        elif re.match(r'^\s+\d{4}年', line_s):
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            run = p.add_run(line_s.strip())
+            _set_run_font(run, '仿宋_GB2312', 14)
+
+        # 正文段落
+        else:
+            p = doc.add_paragraph()
+            p.paragraph_format.first_line_indent = Pt(28)
+            run = p.add_run(line_s)
+            _set_run_font(run, '仿宋_GB2312', 14)
 
     doc.save(output_path)

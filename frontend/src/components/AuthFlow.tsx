@@ -7,12 +7,23 @@ interface Props {
   onCancel: () => void
 }
 
+interface AuthResult {
+  content: string
+  docx_base64: string
+  filename: string
+  letter_content: string
+  letter_base64: string
+  letter_filename: string
+  ledger_updated: boolean
+}
+
 export default function AuthFlow({ onComplete, onCancel }: Props) {
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [processing, setProcessing] = useState(false)
-  const [result, setResult] = useState<{ content: string; docx_base64: string; filename: string } | null>(null)
+  const [result, setResult] = useState<AuthResult | null>(null)
   const [error, setError] = useState('')
   const [drag, setDrag] = useState(false)
+  const [activeTab, setActiveTab] = useState<'request' | 'letter'>('request')
   const inputRef = useRef<HTMLInputElement>(null)
 
   async function handleProcess() {
@@ -21,7 +32,7 @@ export default function AuthFlow({ onComplete, onCancel }: Props) {
     setError('')
     try {
       const res = await processAuthRequest(pdfFile)
-      setResult(res)
+      setResult(res as AuthResult)
     } catch (e: any) {
       setError(e.message || '处理失败')
     } finally {
@@ -35,8 +46,8 @@ export default function AuthFlow({ onComplete, onCancel }: Props) {
         <div className="flex items-center gap-3 text-slate-300">
           <div className="animate-spin w-5 h-5 border-2 border-indigo-400 border-t-transparent rounded-full" />
           <div>
-            <div className="text-sm">正在生成授权请示…</div>
-            <div className="text-xs text-slate-500 mt-0.5">提取字段 → AI起草 → 生成Word</div>
+            <div className="text-sm">正在生成授权请示及授权书…</div>
+            <div className="text-xs text-slate-500 mt-0.5">提取字段 → AI起草 → 生成Word（请示 + 授权书）</div>
           </div>
         </div>
       </div>
@@ -46,21 +57,64 @@ export default function AuthFlow({ onComplete, onCancel }: Props) {
   if (result) {
     return (
       <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 my-3">
-        <div className="text-green-400 font-medium mb-4">✅ 授权请示已生成</div>
+        <div className="text-green-400 font-medium mb-4">
+          ✅ 授权请示及授权书已生成
+          {result.ledger_updated && (
+            <span className="ml-2 text-xs text-slate-400">（已记录台账）</span>
+          )}
+        </div>
+
+        {/* 标签切换 */}
+        <div className="flex gap-1 mb-3 border-b border-slate-700">
+          <button
+            onClick={() => setActiveTab('request')}
+            className={`px-3 py-1.5 text-sm rounded-t transition-colors ${
+              activeTab === 'request'
+                ? 'text-indigo-400 border-b-2 border-indigo-400'
+                : 'text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            授权请示
+          </button>
+          <button
+            onClick={() => setActiveTab('letter')}
+            className={`px-3 py-1.5 text-sm rounded-t transition-colors ${
+              activeTab === 'letter'
+                ? 'text-indigo-400 border-b-2 border-indigo-400'
+                : 'text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            授权书
+          </button>
+        </div>
+
+        {/* 内容预览 */}
         <div className="bg-slate-900/60 rounded-xl p-4 max-h-80 overflow-y-auto mb-4">
           <div className="prose prose-sm prose-invert max-w-none prose-p:my-1">
-            <ReactMarkdown>{result.content}</ReactMarkdown>
+            {activeTab === 'request' ? (
+              <ReactMarkdown>{result.content}</ReactMarkdown>
+            ) : (
+              <pre className="text-xs text-slate-300 whitespace-pre-wrap font-sans">{result.letter_content}</pre>
+            )}
           </div>
         </div>
-        <div className="flex gap-2">
+
+        {/* 操作按钮 */}
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => downloadDocx(result.docx_base64, result.filename)}
             className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg transition-colors"
           >
-            📥 下载 Word 文档
+            📥 下载授权请示
           </button>
           <button
-            onClick={() => onComplete(`✅ 授权请示已生成：${result.filename}`)}
+            onClick={() => downloadDocx(result.letter_base64, result.letter_filename)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
+          >
+            📥 下载授权书
+          </button>
+          <button
+            onClick={() => onComplete(`✅ 授权请示及授权书已生成：${result.filename}、${result.letter_filename}`)}
             className="px-4 py-2 text-slate-400 hover:text-slate-200 text-sm transition-colors"
           >
             完成
