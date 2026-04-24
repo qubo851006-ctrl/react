@@ -37,11 +37,13 @@ class DownloadRequest(BaseModel):
 
 
 def _find_header_row(ws) -> int | None:
-    """找到含「发现问题」的标题行，返回行号（1-based）。"""
+    """找到表头行：某单元格值精确等于「发现问题」的行（1-based）。
+    使用精确匹配避免把含「发现问题」子串的标题行（如「审计发现问题汇总表」）误判为表头。
+    """
     for row_idx in range(1, min(ws.max_row + 1, 10)):
         for col_idx in range(1, ws.max_column + 1):
             cell_val = ws.cell(row_idx, col_idx).value
-            if cell_val and "发现问题" in str(cell_val):
+            if cell_val and str(cell_val).strip() == "发现问题":
                 return row_idx
     return None
 
