@@ -160,7 +160,7 @@ export default function VersionPanel({ open, onClose }: Props) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/60">
           <div>
             <div className="text-sm font-semibold text-white">功能说明 &amp; 版本记录</div>
-            <div className="text-xs text-slate-500 mt-0.5">法务合规部智能体</div>
+            <div className="text-xs text-slate-500 mt-0.5">法务合规部智能体 · Created by 曲波</div>
           </div>
           <button
             onClick={onClose}
