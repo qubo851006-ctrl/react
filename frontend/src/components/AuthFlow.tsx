@@ -1,5 +1,20 @@
 import { useState, useRef } from 'react'
 import { processAuthRequest, downloadDocx } from '../api'
+
+function downloadXlsx(base64: string, filename: string) {
+  const bytes = atob(base64)
+  const arr = new Uint8Array(bytes.length)
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i)
+  const blob = new Blob([arr], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
 import ReactMarkdown from 'react-markdown'
 
 interface Props {
@@ -15,6 +30,8 @@ interface AuthResult {
   letter_base64: string
   letter_filename: string
   ledger_updated: boolean
+  ledger_base64: string | null
+  ledger_filename: string | null
 }
 
 export default function AuthFlow({ onComplete, onCancel }: Props) {
@@ -113,6 +130,14 @@ export default function AuthFlow({ onComplete, onCancel }: Props) {
           >
             📥 下载授权书
           </button>
+          {result.ledger_updated && result.ledger_base64 && result.ledger_filename && (
+            <button
+              onClick={() => downloadXlsx(result.ledger_base64!, result.ledger_filename!)}
+              className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-sm rounded-lg transition-colors"
+            >
+              📊 下载台账
+            </button>
+          )}
           <button
             onClick={() => onComplete(`✅ 授权请示及授权书已生成：${result.filename}、${result.letter_filename}`)}
             className="px-4 py-2 text-slate-400 hover:text-slate-200 text-sm transition-colors"

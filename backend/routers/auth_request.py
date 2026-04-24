@@ -71,8 +71,14 @@ async def process_auth_request(pdf_file: UploadFile = File(...)):
     # 记录台账（路径未配置时静默跳过）
     ledger_path = os.getenv("AUTH_LEDGER_PATH", "")
     ledger_updated = False
+    ledger_b64 = None
+    ledger_filename = None
     if ledger_path and os.path.exists(ledger_path):
         ledger_updated = record_to_ledger(info, title, ledger_path)
+        if ledger_updated:
+            with open(ledger_path, "rb") as f:
+                ledger_b64 = base64.b64encode(f.read()).decode()
+            ledger_filename = os.path.basename(ledger_path)
 
     reply = "✅ 授权请示及授权书已生成！\n\n---\n\n{}".format(auth_content)
     history = load_history()
@@ -87,5 +93,7 @@ async def process_auth_request(pdf_file: UploadFile = File(...)):
         "letter_base64": letter_b64,
         "letter_filename": "授权书_{}.docx".format(project_name[:20]),
         "ledger_updated": ledger_updated,
+        "ledger_base64": ledger_b64,
+        "ledger_filename": ledger_filename,
         "info": info,
     }
