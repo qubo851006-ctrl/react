@@ -17,8 +17,27 @@ interface Props {
 
 type Phase = 'upload' | 'analyzing' | 'review' | 'report'
 
-const DEFAULT_CATEGORIES = ['内控缺陷', '制度执行', '资金管理', '采购管理']
-const DEFAULT_DOMAINS = ['工程业务', '酒店业务', '物业管理', '资产管理']
+// ── 分类体系常量（与后端 CATEGORY_TAXONOMY 保持一致）────────────
+
+const CATEGORY_TAXONOMY: Record<string, string[]> = {
+  '公司治理': ['三重一大决策', '董事会管理', '股东会管理', '会议管理', '其他'],
+  '合同及法律合规管理': ['合同审核及签署', '合同执行', '诉讼管理', '授权管理', '知识产权管理', '其他'],
+  '采购管理': ['采购方式', '采购评审', '供应商管理', '采购文档管理', '其他'],
+  '营销管理': ['代理人管理', '销售管理', '大客户管理', '团队管理', '常旅客管理', '知音商城管理', '品牌管理', '其他'],
+  '人力资源管理': ['人员招聘', '绩效考核', '薪酬福利', '考勤管理', '培训管理', '岗位与人员配置', '离职管理', '领导人员履职待遇', '其他'],
+  '财务管理': ['预算管理', '银行账户管理', '成本费用管理', '资金管理', '往来账款管理', '会计核算管理', '保险及索赔管理', '担保管理', '税务管理', '优惠政策使用管理', '其他'],
+  '资产管理': ['固定资产管理', '存货管理', '低值易耗品管理', '无形资产管理', '资产权证管理', '其他'],
+  '信息系统管理': ['系统功能开发管理', '系统账号管理', '系统安全管理', '系统应用管理', '其他'],
+  '工程项目管理': ['工程项目工期管理', '工程项目招标管理', '工程项目洽商变更', '施工过程管理', '工程项目验收', '工程项目竣工结决算', '其他'],
+  '安全管理': ['安全事件', '安全与质量考核', '空防、消防、地面安全管理', '应急管理', '其他'],
+  '内部控制管理': ['评价管理', '内部控制手册建设', '风险识别与管理', '规章制度审核', '其他'],
+  '行政管理（其他）': ['中央八项规定精神', '档案管理', '证照管理', '礼品管理', '印章管理', '免折票管理', '审计整改', '对外捐赠', '企业文化'],
+  '其他': ['其他'],
+}
+
+const L1_CATEGORIES = Object.keys(CATEGORY_TAXONOMY)
+
+const DEFAULT_DOMAINS = ['物业租赁', '酒店公寓', '工程领域', '资产处置', '历史遗留问题']
 const COLORS = ['#6366f1', '#22d3ee', '#f59e0b', '#10b981', '#f43f5e', '#a78bfa']
 
 // ── 可编辑标签组 ────────────────────────────────────────────────
@@ -152,7 +171,6 @@ export default function AuditFlow({ onComplete, onCancel }: Props) {
   const [phase, setPhase] = useState<Phase>('upload')
   const [file, setFile] = useState<File | null>(null)
   const [dragging, setDragging] = useState(false)
-  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES)
   const [domains, setDomains] = useState<string[]>(DEFAULT_DOMAINS)
   const [rows, setRows] = useState<AuditRow[]>([])
   const [error, setError] = useState('')
@@ -181,18 +199,27 @@ export default function AuditFlow({ onComplete, onCancel }: Props) {
 
   async function startAnalyze() {
     if (!file) { setError('请先上传 Excel 文件'); return }
-    if (categories.length === 0) { setError('请至少配置一个问题类别'); return }
     if (domains.length === 0) { setError('请至少配置一个业务领域'); return }
     setError('')
     setPhase('analyzing')
     try {
-      const result = await analyzeAudit(file, categories, domains)
+      const result = await analyzeAudit(file, domains)
       setRows(result.rows)
       setPhase('review')
     } catch (e: any) {
       setError(e.message || '分析失败，请重试')
       setPhase('upload')
     }
+  }
+
+  // ── 行更新 ──
+
+  function updateRow(i: number, patch: Partial<AuditRow>) {
+    setRows(prev => {
+      const updated = [...prev]
+      updated[i] = { ...updated[i], ...patch }
+      return updated
+    })
   }
 
   // ── 下载 ──
@@ -211,7 +238,7 @@ export default function AuditFlow({ onComplete, onCancel }: Props) {
 
   // ── 统计数据（report 阶段用）──
 
-  function calcStats(key: 'category' | 'domain') {
+  function calcStats(key: 'category_l1' | 'domain') {
     const counts: Record<string, number> = {}
     for (const r of rows) {
       const val = r[key] || '未分类'
@@ -265,9 +292,16 @@ export default function AuditFlow({ onComplete, onCancel }: Props) {
             )}
           </div>
 
-          {/* 分类配置 */}
+          {/* 问题类别说明（固定体系，不可编辑） */}
           <div className="bg-slate-700/30 rounded-xl p-4 mb-4">
-            <TagGroup label="问题类别（可增删）" tags={categories} onChange={setCategories} />
+            <div className="text-xs font-medium text-slate-400 mb-1">问题类别</div>
+            <div className="text-xs text-slate-500">
+              固定采用企业审计问题分类体系（13个一级大类，含对应二级子类），由 AI 自动匹配。
+            </div>
+          </div>
+
+          {/* 业务领域配置 */}
+          <div className="bg-slate-700/30 rounded-xl p-4 mb-4">
             <TagGroup label="业务领域（可增删）" tags={domains} onChange={setDomains} />
           </div>
 
@@ -315,17 +349,17 @@ export default function AuditFlow({ onComplete, onCancel }: Props) {
           <div className="text-sm font-semibold text-slate-200 mb-1">
             ✅ 分类完成，请审查确认（共 {rows.length} 条）
           </div>
-          <div className="text-xs text-slate-500 mb-4">可修改下方下拉框中的分类结果</div>
+          <div className="text-xs text-slate-500 mb-4">可修改下方下拉框中的分类结果；修改一级类别时二级自动切换</div>
 
           <div className="overflow-x-auto rounded-xl border border-slate-700 mb-4">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-700/60">
-                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-400 w-12">序号</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-400 w-40">发现问题</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">问题描述</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-400 w-32">问题类别</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-400 w-32">业务领域</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-400 w-10">序号</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-400 w-36">发现问题</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-400 w-36">问题类别一级</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-400 w-36">问题类别二级</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-400 w-28">业务领域</th>
                 </tr>
               </thead>
               <tbody>
@@ -333,39 +367,46 @@ export default function AuditFlow({ onComplete, onCancel }: Props) {
                   <tr key={row.seq} className={i % 2 === 0 ? 'bg-slate-800' : 'bg-slate-800/60'}>
                     <td className="px-3 py-2 text-slate-400 text-center">{row.seq}</td>
                     <td
-                      className="px-3 py-2 text-slate-200 max-w-[160px] truncate"
+                      className="px-3 py-2 text-slate-200 text-xs max-w-[144px] truncate"
                       title={row.issue}
                     >
                       {row.issue}
                     </td>
-                    <td
-                      className="px-3 py-2 text-slate-400 text-xs max-w-[240px] truncate"
-                      title={row.description}
-                    >
-                      {row.description}
-                    </td>
+                    {/* 一级类别 select */}
                     <td className="px-3 py-2">
                       <select
-                        value={row.category}
+                        value={row.category_l1}
                         onChange={e => {
-                          const updated = [...rows]
-                          updated[i] = { ...row, category: e.target.value }
-                          setRows(updated)
+                          const l1 = e.target.value
+                          updateRow(i, {
+                            category_l1: l1,
+                            category_l2: CATEGORY_TAXONOMY[l1]?.[0] ?? '',
+                          })
                         }}
                         className="w-full bg-slate-700 border border-slate-600 text-slate-200 text-xs rounded px-2 py-1 outline-none focus:border-indigo-500"
                       >
-                        {row.category === '' && <option value="">未分类</option>}
-                        {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                        {row.category_l1 === '' && <option value="">未分类</option>}
+                        {L1_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </td>
+                    {/* 二级类别 select（随一级联动） */}
+                    <td className="px-3 py-2">
+                      <select
+                        value={row.category_l2}
+                        onChange={e => updateRow(i, { category_l2: e.target.value })}
+                        className="w-full bg-slate-700 border border-slate-600 text-slate-200 text-xs rounded px-2 py-1 outline-none focus:border-indigo-500"
+                      >
+                        {row.category_l2 === '' && <option value="">未分类</option>}
+                        {(CATEGORY_TAXONOMY[row.category_l1] ?? []).map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </td>
+                    {/* 业务领域 select */}
                     <td className="px-3 py-2">
                       <select
                         value={row.domain}
-                        onChange={e => {
-                          const updated = [...rows]
-                          updated[i] = { ...row, domain: e.target.value }
-                          setRows(updated)
-                        }}
+                        onChange={e => updateRow(i, { domain: e.target.value })}
                         className="w-full bg-slate-700 border border-slate-600 text-slate-200 text-xs rounded px-2 py-1 outline-none focus:border-indigo-500"
                       >
                         {row.domain === '' && <option value="">未分类</option>}
@@ -401,8 +442,8 @@ export default function AuditFlow({ onComplete, onCancel }: Props) {
           <div className="text-sm font-semibold text-slate-200 mb-4">📊 审计发现问题分析报告</div>
 
           <PieSection
-            title="问题类别分布"
-            data={calcStats('category')}
+            title="问题类别分布（一级）"
+            data={calcStats('category_l1')}
             total={rows.length}
             suffix="问题"
           />

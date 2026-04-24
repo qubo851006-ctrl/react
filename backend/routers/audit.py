@@ -17,6 +17,25 @@ from llm_client import get_llm_client
 router = APIRouter(prefix="/api/audit")
 
 
+# ── 分类体系常量 ───────────────────────────────────────────────────
+
+CATEGORY_TAXONOMY: dict[str, list[str]] = {
+    "公司治理": ["三重一大决策", "董事会管理", "股东会管理", "会议管理", "其他"],
+    "合同及法律合规管理": ["合同审核及签署", "合同执行", "诉讼管理", "授权管理", "知识产权管理", "其他"],
+    "采购管理": ["采购方式", "采购评审", "供应商管理", "采购文档管理", "其他"],
+    "营销管理": ["代理人管理", "销售管理", "大客户管理", "团队管理", "常旅客管理", "知音商城管理", "品牌管理", "其他"],
+    "人力资源管理": ["人员招聘", "绩效考核", "薪酬福利", "考勤管理", "培训管理", "岗位与人员配置", "离职管理", "领导人员履职待遇", "其他"],
+    "财务管理": ["预算管理", "银行账户管理", "成本费用管理", "资金管理", "往来账款管理", "会计核算管理", "保险及索赔管理", "担保管理", "税务管理", "优惠政策使用管理", "其他"],
+    "资产管理": ["固定资产管理", "存货管理", "低值易耗品管理", "无形资产管理", "资产权证管理", "其他"],
+    "信息系统管理": ["系统功能开发管理", "系统账号管理", "系统安全管理", "系统应用管理", "其他"],
+    "工程项目管理": ["工程项目工期管理", "工程项目招标管理", "工程项目洽商变更", "施工过程管理", "工程项目验收", "工程项目竣工结决算", "其他"],
+    "安全管理": ["安全事件", "安全与质量考核", "空防、消防、地面安全管理", "应急管理", "其他"],
+    "内部控制管理": ["评价管理", "内部控制手册建设", "风险识别与管理", "规章制度审核", "其他"],
+    "行政管理（其他）": ["中央八项规定精神", "档案管理", "证照管理", "礼品管理", "印章管理", "免折票管理", "审计整改", "对外捐赠", "企业文化"],
+    "其他": ["其他"],
+}
+
+
 # ── 数据模型 ──────────────────────────────────────────────────────
 
 
@@ -24,7 +43,8 @@ class AuditRow(BaseModel):
     seq: int
     issue: str
     description: str
-    category: str = ""
+    category_l1: str = ""
+    category_l2: str = ""
     domain: str = ""
 
 
@@ -94,7 +114,7 @@ def _extract_rows(wb: openpyxl.Workbook) -> list[dict]:
     return rows
 
 
-def _build_prompt(rows: list[dict], categories: list[str], domains: list[str]) -> str:
+def _build_prompt(rows: list[dict], domains: list[str]) -> str:
     rows_json = json.dumps(
         [{"序号": r["seq"], "发现问题": r["issue"], "问题描述": r["description"][:200]}
          for r in rows],
@@ -102,49 +122,35 @@ def _build_prompt(rows: list[dict], categories: list[str], domains: list[str]) -
         indent=2,
     )
 
-    # 预置各类别说明（仅对已知类别生成，其余跳过）
-    cat_hints = {
-        "内控缺陷": "内部控制制度本身设计存在缺失或不合理之处",
-        "制度执行": "制度本身合理，但实际执行中未严格落实",
-        "资金管理": "涉及资金使用、费用报销、结算支付等",
-        "采购管理": "涉及采购程序、供应商资质、评审定标等",
-    }
-    domain_hints = {
-        "工程业务": "工程项目立项、建设、验收等",
-        "酒店业务": "酒店日常运营、服务管理等",
-        "物业管理": "物业服务、设施维护等",
-        "资产管理": "固定资产台账、处置、盘点等",
-    }
+    # 构建一级→二级对应关系说明
+    taxonomy_lines = "\n".join(
+        f"- {l1}：{'/ '.join(l2_list)}"
+        for l1, l2_list in CATEGORY_TAXONOMY.items()
+    )
 
-    cat_lines = "\n".join(
-        f"- {c}：{cat_hints[c]}" if c in cat_hints else f"- {c}"
-        for c in categories
-    )
-    domain_lines = "\n".join(
-        f"- {d}：{domain_hints[d]}" if d in domain_hints else f"- {d}"
-        for d in domains
-    )
+    domain_lines = "\n".join(f"- {d}" for d in domains)
 
     return f"""你是企业内部审计专家。请对以下审计发现问题进行分类，共两个独立维度，分别判断。
 
-【维度一：问题类别】
-描述问题的性质，从以下选项中选一个最匹配的：{categories}
-{cat_lines}
+【维度一：问题类别（两级）】
+请先选择最匹配的一级类别，再在该一级类别下选择最匹配的二级子类。
+
+一级类别及其对应二级子类：
+{taxonomy_lines}
 
 【维度二：业务领域】
-描述问题所属的业务板块，从以下选项中选一个最匹配的：{domains}
+描述问题所属的业务板块，从以下选项中选一个最匹配的：
 {domain_lines}
 
 【发现问题列表（JSON）】：
 {rows_json}
 
 请严格按如下格式返回，只输出JSON数组，不含任何其他文字：
-[{{"序号": 1, "问题类别": "...", "业务领域": "..."}}, ...]"""
+[{{"序号": 1, "问题类别一级": "...", "问题类别二级": "...", "业务领域": "..."}}, ...]"""
 
 
 def _parse_llm_output(text: str, rows: list[dict]) -> list[dict]:
     """从 LLM 输出中提取 JSON 数组，补全缺失行。"""
-    # 尝试提取 JSON 数组
     match = re.search(r'\[.*\]', text, re.DOTALL)
     if not match:
         raise ValueError(f"LLM 返回格式异常，无法解析 JSON：{text[:200]}")
@@ -157,7 +163,8 @@ def _parse_llm_output(text: str, rows: list[dict]) -> list[dict]:
         classified = result_map.get(r["seq"], {})
         result.append({
             **r,
-            "category": classified.get("问题类别", ""),
+            "category_l1": classified.get("问题类别一级", ""),
+            "category_l2": classified.get("问题类别二级", ""),
             "domain": classified.get("业务领域", ""),
         })
     return result
@@ -169,14 +176,12 @@ def _parse_llm_output(text: str, rows: list[dict]) -> list[dict]:
 @router.post("/analyze")
 async def analyze_audit(
     file: UploadFile = File(...),
-    categories: str = Form('["内控缺陷","制度执行","资金管理","采购管理"]'),
-    domains: str = Form('["工程业务","酒店业务","物业管理","资产管理"]'),
+    domains: str = Form('["物业租赁","酒店公寓","工程领域","资产处置","历史遗留问题"]'),
 ):
     try:
-        cats = json.loads(categories)
         doms = json.loads(domains)
     except json.JSONDecodeError as e:
-        raise HTTPException(status_code=400, detail=f"分类参数格式错误：{e}")
+        raise HTTPException(status_code=400, detail=f"业务领域参数格式错误：{e}")
 
     try:
         content = await file.read()
@@ -190,7 +195,7 @@ async def analyze_audit(
     if not rows:
         raise HTTPException(status_code=400, detail="Excel 中未找到有效数据行。")
 
-    prompt = _build_prompt(rows, cats, doms)
+    prompt = _build_prompt(rows, doms)
     try:
         client = get_llm_client()
         resp = client.chat.completions.create(
@@ -220,8 +225,8 @@ async def download_audit_excel(req: DownloadRequest):
     center_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
     wrap_align = Alignment(wrap_text=True, vertical="top")
 
-    headers = ["序号", "发现问题", "问题描述", "问题类别", "业务领域"]
-    col_widths = [8, 30, 60, 14, 14]
+    headers = ["序号", "发现问题", "问题描述", "问题类别一级", "问题类别二级", "业务领域"]
+    col_widths = [8, 30, 50, 18, 20, 14]
 
     # 写标题行
     for col_idx, (header, width) in enumerate(zip(headers, col_widths), start=1):
@@ -233,18 +238,22 @@ async def download_audit_excel(req: DownloadRequest):
 
     ws.row_dimensions[1].height = 20
 
-    # 新增类别列的填充色（高亮区分）
-    cat_fill = PatternFill("solid", fgColor="EBF5FB")
+    # 分类列填充色
+    cat_l1_fill = PatternFill("solid", fgColor="EBF5FB")
+    cat_l2_fill = PatternFill("solid", fgColor="D6EAF8")
     dom_fill = PatternFill("solid", fgColor="E9F7EF")
 
     for row_idx, row in enumerate(req.rows, start=2):
         ws.cell(row_idx, 1, row.seq).alignment = center_align
         ws.cell(row_idx, 2, row.issue).alignment = wrap_align
         ws.cell(row_idx, 3, row.description).alignment = wrap_align
-        cat_cell = ws.cell(row_idx, 4, row.category)
-        cat_cell.alignment = center_align
-        cat_cell.fill = cat_fill
-        dom_cell = ws.cell(row_idx, 5, row.domain)
+        l1_cell = ws.cell(row_idx, 4, row.category_l1)
+        l1_cell.alignment = center_align
+        l1_cell.fill = cat_l1_fill
+        l2_cell = ws.cell(row_idx, 5, row.category_l2)
+        l2_cell.alignment = center_align
+        l2_cell.fill = cat_l2_fill
+        dom_cell = ws.cell(row_idx, 6, row.domain)
         dom_cell.alignment = center_align
         dom_cell.fill = dom_fill
 

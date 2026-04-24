@@ -143,7 +143,8 @@ export interface AuditRow {
   seq: number
   issue: string
   description: string
-  category: string
+  category_l1: string
+  category_l2: string
   domain: string
 }
 
@@ -154,12 +155,10 @@ export interface AuditAnalysisResult {
 
 export async function analyzeAudit(
   file: File,
-  categories: string[],
   domains: string[],
 ): Promise<AuditAnalysisResult> {
   const form = new FormData()
   form.append('file', file)
-  form.append('categories', JSON.stringify(categories))
   form.append('domains', JSON.stringify(domains))
   const r = await fetch(`${BASE}/audit/analyze`, { method: 'POST', body: form })
   if (!r.ok) throw new Error(await r.text())
