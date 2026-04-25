@@ -126,6 +126,38 @@ def chat(req: ChatRequest):
         save_history(history)
         return {"reply": reply, "next_stage": "download_ledger_excel", "kb_conversation_id": ""}
 
+    # ── 企业信息查询 ──────────────────────────────────────
+    if detect_intent(
+        '你是一个意图识别助手。判断用户消息是否要查询某个具体中国企业/公司的工商信息、'
+        '司法风险、股东信息、经营状况等公司信息。'
+        '注意：必须提及具体公司名称才算YES，泛问"什么是工商信息"等概念性问题算NO。'
+        '只回复 YES 或 NO。'
+    ):
+        name_resp = client.chat.completions.create(
+            model=MODEL_CHAT,
+            messages=[
+                {"role": "system", "content": (
+                    "从用户消息中提取要查询的中国企业名称，只输出企业名称，不要其他文字。"
+                    "示例：用户说【查比亚迪的风险】，只输出【比亚迪】。"
+                )},
+                {"role": "user", "content": req.message},
+            ],
+            max_tokens=30,
+        )
+        raw_name = name_resp.choices[0].message.content.strip()
+        try:
+            from utils.mcp_client import query_company, format_company_markdown
+            result = query_company(raw_name)
+            reply = format_company_markdown(result)
+        except ValueError as e:
+            reply = f"❌ 未找到匹配企业：{e}"
+        except Exception as e:
+            reply = f"❌ 企业信息查询失败：{e}"
+        history.append({"role": "user", "content": req.message})
+        history.append({"role": "assistant", "content": reply})
+        save_history(history)
+        return {"reply": reply, "next_stage": "idle", "kb_conversation_id": ""}
+
     if detect_intent(
         '你是一个意图识别助手。判断用户的消息是否表达了需要进行培训统计或归档处理的意图。'
         '包括但不限于：刚组织完培训想记录、要统计签到人数、需要归档培训文件、上传培训材料等。'
