@@ -8,6 +8,13 @@ interface VersionEntry {
 
 const VERSIONS: VersionEntry[] = [
   {
+    version: 'v1.7',
+    date: '2026-04-28',
+    changes: [
+      { type: 'fix', text: '修复企业信息查询结果未表格化问题：安装 remark-gfm 插件后，Markdown 表格语法正确渲染为带边框的深色主题表格，列间有分隔线，宽表格自动横向滚动' },
+    ],
+  },
+  {
     version: 'v1.6',
     date: '2026-04-25',
     changes: [
